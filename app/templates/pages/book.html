@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Descubriendo Asturias{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='css/book.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='css/guia.css') }}">
+{% endblock %}
+
+{% block body %}
+<div id="app-book" data-root="{{ request.scope.get('root_path', '') }}">
+  <div id="threeCanvas"></div>
+  <div id="hint">Toca para abrir el libro</div>
+  <div id="openProgress"></div>
+  <div id="flashOverlay"></div>
+
+  <div id="leafletContainer">
+    <div id="leafletMap"></div>
+    <button id="expandBtn" title="Expandir mapa">&#x2922;</button>
+    <div id="municipioCard">
+      <button id="cardClose">x</button>
+      <h2 id="cardName"></h2>
+      <p id="cardPop"></p>
+      <a id="cardIr" href="#">Ir</a>
+    </div>
+    <div id="categoryMenu" style="display:none">
+      <button id="catMenuClose">&#x2715;</button>
+      <h2 id="catMenuName"></h2>
+      <div class="cat-menu-grid">
+        <button class="cat-menu-btn" data-cat="ciclismo">&#x1F6B4;<span>Rutas Bici</span></button>
+        <button class="cat-menu-btn" data-cat="senderismo">&#x1F97E;<span>Senderismo</span></button>
+        <button class="cat-menu-btn" data-cat="comer">&#x1F37D;&#xFE0F;<span>Comer</span></button>
+        <button class="cat-menu-btn" data-cat="ocio">&#x1F3AD;<span>Ocio</span></button>
+        <button class="cat-menu-btn" data-cat="tiendas">&#x1F6D2;<span>Tiendas</span></button>
+        <button class="cat-menu-btn" data-cat="mercado">&#x1F3EA;<span>Mercado</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AstuGuía Wizard -->
+  <div id="guia-overlay" class="guia-char-only guia-book" hidden>
+    <button id="guia-skip">Explorar solo →</button>
+    <div id="guia-wrap">
+      <div id="guia-character"></div>
+      <div id="guia-dialog">
+        <button id="guia-close" title="Cerrar">&#x2715;</button>
+        <button id="guia-dialog-expand" title="Maximizar"></button>
+        <p id="guia-text"></p>
+        <div id="guia-choices"></div>
+        <div id="guia-chat-panel">
+          <div id="guia-chat-history"></div>
+          <div id="guia-chat-input-row">
+            <textarea id="guia-chat-input" rows="1" placeholder="Pregunta sobre Asturias..."></textarea>
+            <button id="guia-chat-send">&#x27A4;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="orientationOverlay">
+    <svg viewBox="0 0 60 60">
+      <rect x="15" y="5" width="30" height="50" rx="4"/>
+      <circle cx="30" cy="47" r="2.5"/>
+      <line x1="23" y1="5" x2="37" y2="5"/>
+      <path d="M8 30 A22 22 0 0 1 30 8" stroke-dasharray="6 4"/>
+      <path d="M28 5 L30 8 L32 5"/>
+    </svg>
+    <p>Gira el telefono<br>para una mejor experiencia</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js') }}"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "{{ url_for('static', path='vendor/three/three.module.js') }}",
+    "/static/vendor/three/three.module.js": "{{ url_for('static', path='vendor/three/three.module.js') }}"
+  }
+}
+</script>
+<script type="module" src="{{ url_for('static', path='js/book.js') }}?v=book3"></script>
+<script type="module" src="{{ url_for('static', path='js/guia-book.js') }}?v=anchor2"></script>
+{% endblock %}

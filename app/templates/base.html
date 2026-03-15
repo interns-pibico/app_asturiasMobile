@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a0a2e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>{% block title %}asturiasMobile{% endblock %}</title>
+
+    <!-- Fonts -->
+    <style>
+        @font-face {
+            font-family: 'Inter';
+            src: url('{{ url_for("static", path="vendor/fonts/inter-400-latin.woff2") }}') format('woff2');
+            font-weight: 400;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Inter';
+            src: url('{{ url_for("static", path="vendor/fonts/inter-700-latin.woff2") }}') format('woff2');
+            font-weight: 700;
+            font-display: swap;
+        }
+    </style>
+
+    <!-- Base CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% block body %}{% endblock %}
+
+    {% block scripts %}{% endblock %}
+
+    <script>
+    window.ASTUGUIA_CONTEXT = {
+      municipio_id:     {{ municipio_id | default(None) | tojson }},
+      municipio_nombre: {{ municipio_nombre | default('') | tojson }},
+      categoria:        {{ cat | default('') | tojson }}
+    };
+    </script>
+</body>
+</html>

@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}{{ municipio.nombre }} — {{ categoria_label }} — asturiasMobile{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='css/explorar.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='css/guia.css') }}">
+{% endblock %}
+
+{% block body %}
+<div id="app-explorar"
+     data-root="{{ request.scope.get('root_path', '') }}"
+     data-municipio-id="{{ municipio.id }}"
+     data-municipio-nombre="{{ municipio.nombre }}"
+     data-cat="{{ cat }}"
+     data-costero="{{ 'true' if es_costero else 'false' }}"
+     data-geojson="{{ geojson_str }}">
+
+    <canvas id="explorar-canvas"></canvas>
+
+    <header class="explorar-hud">
+        <button id="btn-back" class="hud-btn" aria-label="Volver al mapa">
+            <span>&#x25C4;</span>
+        </button>
+        <div class="hud-municipio-name">{{ municipio.nombre }}</div>
+        <div class="hud-cat-label">{{ categoria_label }}</div>
+    </header>
+
+    <button id="load-more-btn" style="display:none">Cargar m&#225;s</button>
+
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-mario">
+            <div class="loading-sprite">&#x1F5FA;&#xFE0F;</div>
+            <div class="loading-bar-wrap">
+                <div class="loading-bar" id="loading-bar"></div>
+            </div>
+            <div class="loading-text">Explorando {{ municipio.nombre }}...</div>
+        </div>
+    </div>
+
+    <!-- Filter panel restaurantes/ocio/tiendas — siempre en DOM, tags rellenos por JS -->
+    <div id="cat-filter-panel">
+      <div class="cfp-header">
+        <span id="cfp-title">Filtrar</span>
+        <button id="cfp-close">&#x2715;</button>
+      </div>
+      <input id="cfp-search" type="text" placeholder="Buscar por nombre..." autocomplete="off">
+      <div class="cfp-tags" id="cfp-tags">
+        <button class="cfp-tag active" data-tipo="">Todos</button>
+      </div>
+      <button id="cfp-apply">Aplicar filtro</button>
+    </div>
+
+    <!-- Panel filtro Mercado — siempre en DOM -->
+    <div id="mercado-filter-panel">
+        <div class="mfp-header">
+            <span>Filtrar comercios</span>
+            <button id="mfp-close">&#x2715;</button>
+        </div>
+        <input id="mfp-search" type="text" placeholder="Buscar por nombre..." autocomplete="off">
+        <div class="mfp-tags">
+            <button class="mfp-tag" data-q="">Todos</button>
+            <button class="mfp-tag" data-q="sidra">Sidra</button>
+            <button class="mfp-tag" data-q="queso">Quesos</button>
+            <button class="mfp-tag" data-q="embutido">Embutidos</button>
+            <button class="mfp-tag" data-q="artesania">Artesan&#237;a</button>
+            <button class="mfp-tag" data-q="vino">Vinos</button>
+        </div>
+        <button id="mfp-apply">Aplicar filtro</button>
+    </div>
+
+    <!-- Sidebar izquierdo de detalle de ruta -->
+    <aside id="route-sidebar">
+      <button id="route-sidebar-close">&#x2715;</button>
+      <div class="route-sidebar-scroll">
+        <div class="route-cat-badge" id="rds-cat-badge">&#x2014;</div>
+        <h3 class="rds-nombre" id="rds-nombre">&#x2014;</h3>
+        <div class="rds-badges">
+          <span class="rds-badge" id="rds-distancia">&#x2014;</span>
+          <span class="rds-badge rds-dif" id="rds-dificultad">&#x2014;</span>
+        </div>
+        <div class="rds-desnivel" id="rds-desnivel-row" style="display:none">
+          <div class="rds-desnivel-label">Desnivel</div>
+          <div class="rds-desnivel-vals">
+            <span>&#x2B06; Ascenso: <strong id="rds-ascenso">&#x2014;</strong> m</span>
+            <span>&#x2B07; Descenso: <strong id="rds-descenso">&#x2014;</strong> m</span>
+          </div>
+        </div>
+        <ul class="rds-meta">
+          <li id="rds-row-superficie"><span class="rds-label">Superficie</span><span id="rds-superficie">&#x2014;</span></li>
+          <li id="rds-row-desde"><span class="rds-label">Desde</span><span id="rds-desde">&#x2014;</span></li>
+          <li id="rds-row-hasta"><span class="rds-label">Hasta</span><span id="rds-hasta">&#x2014;</span></li>
+          <li id="rds-row-operador"><span class="rds-label">Operador</span><span id="rds-operador">&#x2014;</span></li>
+          <li id="rds-row-network"><span class="rds-label">Red</span><span id="rds-network">&#x2014;</span></li>
+        </ul>
+        <p id="rds-descripcion" class="rds-desc"></p>
+        <a id="rds-website" class="rds-link" target="_blank" rel="noopener">M&#225;s informaci&#243;n &#x2192;</a>
+      </div>
+      <div id="route-minimap"></div>
+    </aside>
+
+    <!-- Sidebar izquierdo de detalle POI -->
+    <aside id="poi-sidebar">
+      <button id="poi-close">&#x2715;</button>
+      <div class="poi-sidebar-scroll">
+        <div class="poi-subcat-badge" id="poi-subcat"></div>
+        <div class="poi-tipo" id="poi-tipo"></div>
+        <h3 class="poi-nombre" id="poi-nombre"></h3>
+        <p class="poi-desc" id="poi-desc"></p>
+        <p class="poi-extra" id="poi-extra"></p>
+        <p class="poi-address" id="poi-address"></p>
+        <p class="poi-hours" id="poi-hours"></p>
+        <a class="poi-web" id="poi-web" href="#" target="_blank" rel="noopener">Ver web</a>
+      </div>
+      <div id="poi-minimap"></div>
+    </aside>
+
+    <nav id="cat-bottom-bar">
+        <button class="cat-bar-btn {% if cat=='ciclismo' %}active{% endif %}" data-cat="ciclismo">
+            <span class="cat-bar-icon">&#x1F6B4;</span>
+            <span class="cat-bar-label">Bici</span>
+        </button>
+        <button class="cat-bar-btn {% if cat=='senderismo' %}active{% endif %}" data-cat="senderismo">
+            <span class="cat-bar-icon">&#x1F97E;</span>
+            <span class="cat-bar-label">Senderismo</span>
+        </button>
+        <button class="cat-bar-btn {% if cat=='sendas_verdes' %}active{% endif %}" data-cat="sendas_verdes">
+            <span class="cat-bar-icon">&#x1F333;</span>
+            <span class="cat-bar-label">Sendas</span>
+        </button>
+        <button class="cat-bar-btn {% if cat=='carril_bici' %}active{% endif %}" data-cat="carril_bici">
+            <span class="cat-bar-icon">&#x1F6B2;</span>
+            <span class="cat-bar-label">Carril Bici</span>
+        </button>
+        <button class="cat-bar-btn {% if cat=='paseos' %}active{% endif %}" data-cat="paseos">
+            <span class="cat-bar-icon">&#x1F6B6;</span>
+            <span class="cat-bar-label">Paseos</span>
+        </button>
+        <button class="cat-bar-btn {% if cat=='comer' %}active{% endif %}" data-cat="comer">
+            <span class="cat-bar-icon">&#x1F37D;&#xFE0F;</span>
+            <span class="cat-bar-label">Comer</span>
+        </button>
+        <button class="cat-bar-btn {% if cat=='ocio' %}active{% endif %}" data-cat="ocio">
+            <span class="cat-bar-icon">&#x1F3AD;</span>
+            <span class="cat-bar-label">Ocio</span>
+        </button>
+        <button class="cat-bar-btn {% if cat=='tiendas' %}active{% endif %}" data-cat="tiendas">
+            <span class="cat-bar-icon">&#x1F6D2;</span>
+            <span class="cat-bar-label">Tiendas</span>
+        </button>
+        <button class="cat-bar-btn {% if cat=='mercado' %}active{% endif %}" data-cat="mercado">
+            <span class="cat-bar-icon">&#x1F3EA;</span>
+            <span class="cat-bar-label">Mercado</span>
+        </button>
+    </nav>
+
+    <div id="poi-tooltip"></div>
+
+    <!-- AstuGuía Comentarista -->
+    <div id="guia-overlay" class="guia-char-only" hidden>
+      <div id="guia-wrap">
+        <div id="guia-character"></div>
+        <div id="guia-dialog">
+          <button id="guia-close" title="Cerrar">&#x2715;</button>
+          <button id="guia-dialog-expand" title="Maximizar"></button>
+          <p id="guia-text"></p>
+          <div id="guia-choices"></div>
+          <div id="guia-chat-panel">
+            <div id="guia-chat-history"></div>
+            <div id="guia-chat-input-row">
+              <textarea id="guia-chat-input" rows="1" placeholder="Pregunta sobre Asturias..."></textarea>
+              <button id="guia-chat-send">&#x27A4;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar categorías para desktop/tablet (≥768px) -->
+    <nav id="cat-sidebar">
+        <button id="cat-sidebar-toggle" class="cat-sb-toggle" aria-label="Expandir categorías">&#x2630;</button>
+        <button class="cat-sb-btn {% if cat=='ciclismo' %}active{% endif %}" data-cat="ciclismo">
+            <span class="cat-sb-icon">&#x1F6B4;</span>
+            <span class="cat-sb-label">Ciclismo</span>
+        </button>
+        <button class="cat-sb-btn {% if cat=='senderismo' %}active{% endif %}" data-cat="senderismo">
+            <span class="cat-sb-icon">&#x1F97E;</span>
+            <span class="cat-sb-label">Senderismo</span>
+        </button>
+        <button class="cat-sb-btn {% if cat=='sendas_verdes' %}active{% endif %}" data-cat="sendas_verdes">
+            <span class="cat-sb-icon">&#x1F333;</span>
+            <span class="cat-sb-label">Sendas Verdes</span>
+        </button>
+        <button class="cat-sb-btn {% if cat=='carril_bici' %}active{% endif %}" data-cat="carril_bici">
+            <span class="cat-sb-icon">&#x1F6B2;</span>
+            <span class="cat-sb-label">Carril Bici</span>
+        </button>
+        <button class="cat-sb-btn {% if cat=='paseos' %}active{% endif %}" data-cat="paseos">
+            <span class="cat-sb-icon">&#x1F6B6;</span>
+            <span class="cat-sb-label">Paseos</span>
+        </button>
+        <button class="cat-sb-btn {% if cat=='comer' %}active{% endif %}" data-cat="comer">
+            <span class="cat-sb-icon">&#x1F37D;&#xFE0F;</span>
+            <span class="cat-sb-label">Comer</span>
+        </button>
+        <button class="cat-sb-btn {% if cat=='ocio' %}active{% endif %}" data-cat="ocio">
+            <span class="cat-sb-icon">&#x1F3AD;</span>
+            <span class="cat-sb-label">Ocio</span>
+        </button>
+        <button class="cat-sb-btn {% if cat=='tiendas' %}active{% endif %}" data-cat="tiendas">
+            <span class="cat-sb-icon">&#x1F6D2;</span>
+            <span class="cat-sb-label">Tiendas</span>
+        </button>
+        <button class="cat-sb-btn {% if cat=='mercado' %}active{% endif %}" data-cat="mercado">
+            <span class="cat-sb-icon">&#x1F3EA;</span>
+            <span class="cat-sb-label">Mercado</span>
+        </button>
+        <button id="cat-sb-filter-btn" class="cat-sb-btn">
+            <span class="cat-sb-icon">&#x2699;&#xFE0F;</span>
+            <span class="cat-sb-label">Filtros</span>
+        </button>
+    </nav>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='vendor/leaflet/leaflet.js') }}"></script>
+<script type="importmap">
+{
+  "imports": {
+    "/static/vendor/three/three.module.js": "{{ url_for('static', path='vendor/three/three.module.js') }}"
+  }
+}
+</script>
+<script type="module" src="{{ url_for('static', path='js/explorar.js') }}?v=comer1"></script>
+<script type="module" src="{{ url_for('static', path='js/guia-explorar.js') }}?v=local2"></script>
+{% endblock %}

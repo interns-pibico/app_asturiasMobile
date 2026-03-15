@@ -1,0 +1,176 @@
+html, body {
+  background: #3d1a06; overflow: hidden;
+}
+
+#threeCanvas {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+}
+
+#hint {
+  position: fixed; bottom: 10%; left: 50%; transform: translateX(-50%);
+  color: #e8c870; font-family: Georgia, serif; font-size: 1.1rem;
+  text-shadow: 0 0 12px rgba(232,200,112,0.9), 0 0 24px rgba(200,140,20,0.5);
+  animation: pulse 2.2s ease-in-out infinite;
+  pointer-events: none; z-index: 100; letter-spacing: 0.08em;
+  white-space: nowrap;
+  transition: opacity 0.5s ease;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1.0; }
+}
+
+#flashOverlay {
+  position: fixed; inset: 0; background: #f5e8c0;
+  opacity: 0; pointer-events: none; z-index: 200;
+  transition: opacity 0.3s ease;
+}
+
+#openProgress {
+  position: fixed; top: 6%; left: 50%; transform: translateX(-50%);
+  color: #e8c870; font-family: Georgia, serif; font-size: 0.85rem;
+  text-shadow: 0 0 10px rgba(232,200,112,0.8);
+  pointer-events: none; z-index: 110;
+  opacity: 0; transition: opacity 0.4s;
+}
+
+/* FASE 3: Leaflet container superpuesto sobre pagina derecha del libro 3D */
+#leafletContainer {
+  position: fixed;
+  z-index: 10;
+  display: none;
+  overflow: hidden;
+  border-radius: 0 2px 2px 0;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.12);
+  transition: left 0.3s ease, top 0.3s ease,
+              width 0.3s ease, height 0.3s ease,
+              border-radius 0.3s ease;
+}
+
+#leafletContainer.is-expanded {
+  left: 0 !important;
+  top: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  z-index: 500 !important;
+  overflow: visible !important;
+}
+
+#expandBtn {
+  position: absolute; top: 8px; right: 8px; z-index: 1000;
+  background: rgba(245,234,208,0.9); border: 1.5px solid #5c2a00;
+  border-radius: 4px; width: 44px; height: 44px;
+  font-size: 1.1rem; cursor: pointer; color: #3a1000;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  padding: 0;
+}
+
+#leafletContainer.is-expanded #expandBtn {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top, 16px));
+  right: max(20px, calc(env(safe-area-inset-right, 0px) + 20px));
+  width: 44px; height: 44px;
+  font-size: 1.4rem;
+  z-index: 600;
+}
+
+/* ── Orientation overlay ── */
+#orientationOverlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 999;
+  background: #2a0f00;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 20px;
+}
+#orientationOverlay svg {
+  width: 80px; height: 80px;
+  fill: none; stroke: #e8c870; stroke-width: 3;
+  animation: rotateHint 2s ease-in-out infinite;
+}
+@keyframes rotateHint {
+  0%, 100% { transform: rotate(0deg); }
+  50%       { transform: rotate(90deg); }
+}
+#orientationOverlay p {
+  color: #e8c870; font-family: Georgia, serif;
+  font-size: 1.1rem; text-align: center; letter-spacing: 0.05em;
+}
+
+#leafletMap {
+  width: 100%; height: 100%;
+  filter: sepia(0.4) brightness(0.95) saturate(0.5);
+  background: #f5f0e4;
+}
+
+#municipioCard {
+  display: none;
+  position: absolute; bottom: 12px; left: 50%;
+  transform: translateX(-50%);
+  background: #f5ead0;
+  border: 2px solid #5c2a00;
+  border-radius: 4px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  text-align: center; min-width: 160px;
+  z-index: 1000; font-family: Georgia, serif;
+}
+
+#cardClose {
+  position: absolute; top: 6px; right: 8px;
+  background: none; border: none;
+  color: #5c2a00; font-size: 1.1rem; cursor: pointer;
+}
+
+#cardName { color: #3a1000; font-size: 0.9rem; margin-bottom: 4px; }
+#cardPop  { color: #5c2a00; font-size: 0.72rem; margin-bottom: 8px; }
+#cardIr {
+  display: inline-block; background: #8b3010; color: #f5ead0;
+  padding: 5px 12px; border-radius: 3px;
+  text-decoration: none; font-size: 0.8rem;
+}
+
+#categoryMenu {
+  position: absolute; bottom: 12px; left: 50%;
+  transform: translateX(-50%);
+  background: #f5ead0; border: 3px solid #5c2a00;
+  border-radius: 8px; padding: 12px 14px 14px;
+  box-shadow: 4px 4px 0 #1a0a2e;
+  text-align: center; min-width: 280px; max-width: 92vw;
+  z-index: 1000; font-family: Georgia, serif;
+}
+
+#catMenuName {
+  color: #3a1000; font-size: 1rem; font-weight: 700; margin-bottom: 10px;
+}
+
+.cat-menu-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+
+.cat-menu-btn {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px;
+  min-height: 56px; padding: 6px 4px;
+  background: #8b5030; color: #f5ead0;
+  border: 2px solid #3a1000; border-radius: 6px;
+  box-shadow: 3px 3px 0 #1a0a2e;
+  font-size: 1.3rem; cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.cat-menu-btn span {
+  font-size: 0.62rem; font-weight: 600;
+  font-family: 'Inter', sans-serif;
+}
+
+.cat-menu-btn:active {
+  transform: translate(2px, 2px); box-shadow: 1px 1px 0 #1a0a2e;
+}
+
+#catMenuClose {
+  position: absolute; top: 6px; right: 8px;
+  background: none; border: none; color: #5c2a00;
+  font-size: 1.1rem; cursor: pointer; padding: 4px 6px;
+}

@@ -1,0 +1,535 @@
+/* ── AstuGuía — Estilos compartidos (book.html + explorar.html) ── */
+
+/* ── Contenedor principal ── */
+#guia-overlay {
+  position: fixed;
+  z-index: 9000;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+/* Filter en guia-wrap (no en overlay) para que #guia-skip no quede clipado */
+#guia-wrap {
+  filter: drop-shadow(4px 6px 0 rgba(0,0,0,0.4));
+}
+#guia-overlay.dragging { cursor: grabbing; }
+#guia-overlay[hidden] { display: none !important; }
+
+/* ── Animación entrada ── */
+.guia-in {
+  animation: guiaSlideUp 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes guiaSlideUp {
+  from { opacity: 0; transform: translateY(30px) scale(0.85); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+/* ── Personaje ── */
+#guia-character {
+  flex-shrink: 0;
+  width: 72px;
+  height: 96px;
+  position: relative;
+  animation: guiaBounce 2.2s ease-in-out infinite;
+  filter: drop-shadow(2px 4px 0 rgba(0,0,0,0.35));
+}
+#guia-character.talking {
+  animation: guiaWiggle 0.35s ease-in-out infinite alternate;
+}
+@keyframes guiaBounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+@keyframes guiaWiggle {
+  from { transform: rotate(-3deg) translateY(0); }
+  to   { transform: rotate(3deg)  translateY(-3px); }
+}
+
+/* ── Burbuja de diálogo ── */
+#guia-dialog {
+  position: relative;
+  background: #fff9e6;
+  border: 3px solid #1a1a1a;
+  box-shadow: 4px 4px 0 #1a1a1a;
+  border-radius: 10px;
+  padding: 14px 16px;
+  max-width: 320px;
+  min-width: 200px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Flecha apuntando al personaje (a la izquierda del diálogo) */
+#guia-dialog::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  bottom: 24px;
+  border: 7px solid transparent;
+  border-right-color: #1a1a1a;
+}
+#guia-dialog::after {
+  content: '';
+  position: absolute;
+  left: -10px;
+  bottom: 25px;
+  border: 6px solid transparent;
+  border-right-color: #fff9e6;
+}
+
+/* ── Texto con typewriter ── */
+#guia-text {
+  margin: 0 0 10px 0;
+  min-height: 40px;
+  flex-shrink: 0;
+}
+#guia-text:empty { margin: 0; min-height: 0; }
+
+/* ── Botones de respuesta ── */
+#guia-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+#guia-choices:empty { display: none; }
+
+.guia-btn {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  background: #f5e6c8;
+  border: 2.5px solid #1a1a1a;
+  box-shadow: 2px 2px 0 #1a1a1a;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1a1a;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.guia-btn:hover, .guia-btn:focus {
+  transform: scale(1.04) translateY(-1px);
+  box-shadow: 3px 3px 0 #1a1a1a;
+  background: #ffe5a0;
+  outline: none;
+}
+.guia-btn:active {
+  transform: scale(0.98) translateY(1px);
+  box-shadow: 1px 1px 0 #1a1a1a;
+}
+
+/* ── Botón cerrar / skip ── */
+#guia-skip {
+  position: absolute;
+  top: -38px;
+  right: 0;
+  background: #f0b0a0;
+  color: #1a1a1a;
+  border: 2.5px solid #1a1a1a;
+  box-shadow: 2px 2px 0 #1a1a1a;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  z-index: 10;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+#guia-skip:hover { background: #e89a88; }
+#guia-skip:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* ── Botón toggle (modo compacto explorar) ── */
+#guia-toggle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid #1a1a1a;
+  box-shadow: 3px 3px 0 #1a1a1a;
+  background: #f5e6c8;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.1s;
+}
+#guia-toggle:hover { transform: scale(1.1); }
+
+/* Modo compacto — solo botón toggle visible, sin personaje ni diálogo */
+#guia-overlay.guia-compact #guia-wrap {
+  display: none;
+}
+#guia-overlay.guia-compact.guia-open #guia-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+}
+#guia-overlay.guia-compact.guia-open #guia-character {
+  width: 56px;
+  height: 74px;
+}
+
+/* ── Wrap personaje + burbuja ── */
+#guia-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  position: relative;
+}
+
+/* ────────────────────────────────────────────
+   Chat panel — oculto hasta activación
+   ──────────────────────────────────────────── */
+#guia-chat-panel {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+.guia-chat-active #guia-chat-panel {
+  display: flex;
+}
+
+/* Historial de mensajes */
+#guia-chat-history {
+  overflow-y: auto;
+  max-height: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  padding-right: 2px;
+}
+#guia-chat-history::-webkit-scrollbar { width: 4px; }
+#guia-chat-history::-webkit-scrollbar-thumb { background: #c8a020; border-radius: 2px; }
+
+/* Burbujas de mensajes */
+.gchat-msg {
+  padding: 5px 8px;
+  border-radius: 6px;
+  line-height: 1.4;
+  max-width: 95%;
+  word-break: break-word;
+}
+.gchat-user {
+  background: #ffe5a0;
+  border: 1.5px solid #1a1a1a;
+  align-self: flex-end;
+  text-align: right;
+}
+.gchat-bot {
+  background: #f0f0f0;
+  border: 1.5px solid #ccc;
+  align-self: flex-start;
+}
+
+/* Indicador de carga (tres puntos) */
+.gchat-dots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 8px 10px;
+}
+.gchat-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #888;
+  animation: gchatDot 1.2s infinite;
+}
+.gchat-dots span:nth-child(2) { animation-delay: 0.2s; }
+.gchat-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes gchatDot {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+  40%           { transform: scale(1);   opacity: 1;   }
+}
+
+/* Fila de entrada */
+#guia-chat-input-row {
+  display: flex;
+  gap: 5px;
+  align-items: flex-end;
+}
+#guia-chat-input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  background: #fff9e6;
+  color: #1a1a1a;
+  resize: none;
+  min-height: 36px;
+  max-height: 80px;
+  overflow-y: auto;
+  box-shadow: inset 1px 1px 0 rgba(0,0,0,0.07);
+}
+#guia-chat-input:focus {
+  outline: none;
+  border-color: #c8a020;
+  box-shadow: 0 0 0 2px rgba(200,160,32,0.25);
+}
+#guia-chat-send {
+  width: 34px;
+  height: 34px;
+  background: #c8a020;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 #1a1a1a;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  transition: transform 0.08s;
+}
+#guia-chat-send:hover { transform: scale(1.08); background: #a08010; }
+#guia-chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Botón de navegación a municipio */
+.guia-btn-nav {
+  background: #2d8a4e;
+  color: #fff;
+}
+.guia-btn-nav:hover, .guia-btn-nav:focus {
+  background: #236b3c;
+  color: #fff;
+}
+
+/* ── Markdown inline en mensajes del bot ── */
+.gchat-msg strong { font-weight: 700; }
+.gchat-msg em     { font-style: italic; }
+.gchat-msg code   {
+  font-family: monospace;
+  background: rgba(0,0,0,0.07);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+
+/* ── Botones de acción del diálogo (cerrar + expandir) ── */
+#guia-dialog { padding-top: 38px; }
+
+#guia-close {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 10;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  color: #b04030;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: transform 0.15s, color 0.1s;
+}
+#guia-close:hover { color: #7a1a0a; transform: scale(1.2); }
+
+#guia-dialog-expand {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 10;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #888;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+#guia-dialog-expand:hover { color: #333; transform: scale(1.2); }
+
+/* ── Modo expandido ── */
+#guia-overlay.chat-expanded #guia-dialog {
+  max-width: 420px;
+  min-width: 340px;
+  transition: all 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+
+  /* ── Escala el contenido interior ── */
+  font-size: 15px;        /* era 13px */
+
+}
+
+#guia-overlay.chat-expanded #guia-chat-input {
+  font-size: 15px;        /* era 13px */
+  min-height: 44px;       /* era 36px */
+  max-height: 100px;      /* era 80px */
+}
+
+#guia-overlay.chat-expanded .gchat-msg {
+  font-size: 14px;        /* era 12px */
+  padding: 8px 12px;      /* era 5px 8px */
+}
+
+#guia-overlay.chat-expanded #guia-chat-send {
+  width: 42px;            /* era 34px */
+  height: 42px;           /* era 34px */
+  font-size: 17px;        /* era 14px */
+}
+
+#guia-overlay.chat-expanded #guia-chat-history {
+  max-height: 500px;
+  transition: max-height 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+/* Transición también al encoger */
+#guia-dialog {
+  transition: all 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+#guia-chat-history {
+  transition: max-height 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+/* ── Captura de nombre ── */
+.guia-name-row {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  width: 100%;
+  align-items: center;
+}
+.guia-name-input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 2px solid #c8a84b;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.9);
+  font-family: inherit;
+  font-size: 12px;
+  color: #222;
+  outline: none;
+}
+.guia-name-input:focus {
+  border-color: #4a2612;
+  box-shadow: 0 0 0 2px rgba(200,168,75,0.3);
+}
+.guia-name-row .guia-btn {
+  flex: 0 0 auto;
+  width: auto;
+  white-space: nowrap;
+}
+
+/* ── Modo solo personaje (book.html — estado inicial) ── */
+#guia-overlay.guia-char-only #guia-dialog { display: none; }
+#guia-overlay.guia-char-only #guia-skip   { display: none; }
+#guia-overlay.guia-char-only #guia-character { cursor: pointer; }
+
+/* ══════════════════════════════════════════════════
+   BOOK.HTML — Monigote anclado esquina inferior derecha
+   ══════════════════════════════════════════════════ */
+
+/* No arrastrable — siempre esquina inferior derecha */
+#guia-overlay.guia-book {
+  cursor: default;
+  bottom: 20px;
+  right: 20px;
+}
+#guia-overlay.guia-book #guia-character {
+  cursor: pointer;
+}
+
+/* Dialog: tamaño fijo desde el primer click (no crece con el contenido) */
+#guia-overlay.guia-book #guia-dialog {
+  width: 320px;
+  height: 500px;
+  min-width: 320px;
+  max-width: 320px;
+  font-size: 14px;
+  transition: width 0.35s ease, height 0.35s ease;
+}
+/* Chat panel toma el espacio restante del dialog */
+#guia-overlay.guia-book.guia-chat-active #guia-chat-panel {
+  flex: 1;
+  min-height: 0;
+}
+#guia-overlay.guia-book #guia-chat-history {
+  flex: 1;
+  min-height: 0;
+  max-height: unset;
+}
+/* Input pinado al fondo del panel */
+#guia-overlay.guia-book #guia-chat-input-row {
+  flex-shrink: 0;
+}
+#guia-overlay.guia-book .gchat-msg {
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+/* ── Book expanded: crece desde la esquina inferior derecha hacia arriba-izquierda ── */
+/* El overlay permanece en bottom:20px/right:20px — el dialog crece */
+#guia-overlay.guia-book.chat-expanded #guia-dialog {
+  width: 70vw;
+  height: 70vh;
+  max-width: 70vw;
+  font-size: 15px;
+}
+#guia-overlay.guia-book.chat-expanded .gchat-msg {
+  font-size: 14px;
+  padding: 8px 12px;
+}
+#guia-overlay.guia-book.chat-expanded #guia-chat-input {
+  font-size: 15px;
+  min-height: 44px;
+  max-height: 100px;
+}
+#guia-overlay.guia-book.chat-expanded #guia-chat-send {
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+}
+
+/* ── Responsive: mobile ── */
+@media (max-width: 480px) {
+  #guia-overlay {
+    bottom: 80px;  /* sobre la bottom bar */
+    right: 12px;
+  }
+  #guia-dialog {
+    max-width: 240px;
+    font-size: 12px;
+    padding: 10px 12px;
+  }
+  #guia-character {
+    width: 58px;
+    height: 76px;
+  }
+
+  /* Reducir historial para que quepan los botones del wizard */
+  #guia-chat-history { max-height: 100px; }
+
+  /*Modo movil para expandir */
+  #guia-overlay.chat-expanded #guia-dialog {
+    max-width: calc(100vw - 24px);
+    min-width: 260px;
+  }
+  #guia-overlay.chat-expanded #guia-chat-history {
+    max-height: 360px;
+  }
+}

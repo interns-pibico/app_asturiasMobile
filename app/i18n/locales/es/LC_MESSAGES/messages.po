@@ -1,0 +1,37 @@
+# Spanish translations for app_template
+msgid ""
+msgstr ""
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "welcome_title"
+msgstr "Bienvenido"
+
+msgid "welcome_message"
+msgstr "Bienvenido a la aplicación"
+
+msgid "login"
+msgstr "Iniciar sesión"
+
+msgid "register"
+msgstr "Registrarse"
+
+msgid "logout"
+msgstr "Cerrar sesión"
+
+msgid "email"
+msgstr "Correo electrónico"
+
+msgid "password"
+msgstr "Contraseña"
+
+msgid "full_name"
+msgstr "Nombre completo"
+
+msgid "submit"
+msgstr "Enviar"
+
+msgid "language"
+msgstr "Idioma"
