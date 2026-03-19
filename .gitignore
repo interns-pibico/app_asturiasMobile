@@ -14,15 +14,12 @@ build/
 venv/
 .venv/
 env/
-.env
 
 # Environment / secrets
 .env
 *.env
 .env.*
-
-# Claude
-CLAUDE.md
+!.env.example
 
 # Logs
 logs/
@@ -42,6 +39,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Runtime
+*.ctl
+
 # Alembic
 alembic/versions/*.pyc
 
@@ -53,3 +53,9 @@ alembic/versions/*.pyc
 .MEMORY.md
 *.MEMORY.md
 .playwright-mcp/
+
+# Sesiones de desarrollo
+docs/sesiones/
+
+# Tests generados
+tests/screenshots/
