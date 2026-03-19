@@ -1,5 +1,6 @@
 import unicodedata
 import httpx
+from typing import Optional
 
 MERCADO_BASE_URL = "http://localhost:8001/v1"
 
@@ -10,10 +11,13 @@ def _nombre_to_slug(nombre: str) -> str:
     return s.replace(" ", "-")
 
 
-async def get_comercios_by_municipio(municipio_nombre: str) -> dict:
-    """Proxy async hacia api_mercadoAsturias."""
+async def get_comercios_by_municipio(municipio_nombre: str, categoria: Optional[str] = None) -> dict:
+    """Proxy async hacia api_mercadoAsturias. categoria: gastro|dulce|sidra-bebidas|artesania|huerta-campo"""
     slug = _nombre_to_slug(municipio_nombre)
-    url = f"{MERCADO_BASE_URL}/municipios/{slug}/comercios"
+    if categoria:
+        url = f"{MERCADO_BASE_URL}/municipios/{slug}/categorias/{categoria}/comercios"
+    else:
+        url = f"{MERCADO_BASE_URL}/municipios/{slug}/comercios"
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
             resp = await client.get(url)

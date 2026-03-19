@@ -241,57 +241,6 @@ function drawVictoriaCross(ctx, cx, cy, size) {
   ctx.restore();
 }
 
-// ── Cruz pequena para la textura de la pagina izquierda abierta ──
-function drawVictoriaCrossSmall(ctx, cx, cy, s) {
-  const aw = s * 0.18;
-  const ah = s * 0.85;
-  const hw = s * 0.68;
-
-  ctx.save();
-
-  const grad = ctx.createLinearGradient(cx, cy - ah / 2, cx, cy + ah / 2);
-  grad.addColorStop(0, '#c8900a');
-  grad.addColorStop(1, '#8b5e0a');
-  ctx.fillStyle = grad;
-
-  ctx.beginPath();
-  ctx.roundRect(cx - aw / 2, cy - ah / 2, aw, ah, 3);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.roundRect(cx - hw / 2, cy - aw * 1.5, hw, aw, 3);
-  ctx.fill();
-
-  // Colgantes Alpha y Omega pequenos
-  const armCY = cy - aw * 1.5;
-  const lX = cx - hw / 2 + aw * 0.5;
-  const rX = cx + hw / 2 - aw * 0.5;
-  const cStartY = armCY + aw / 2;
-  const cLen = s * 0.14;
-  const mR = s * 0.07;
-  const mCY = cStartY + cLen + mR;
-
-  ctx.strokeStyle = '#c8900a'; ctx.lineWidth = 1.2;
-  ctx.beginPath(); ctx.moveTo(lX, cStartY); ctx.lineTo(lX, cStartY + cLen); ctx.stroke();
-  ctx.beginPath(); ctx.arc(lX, mCY, mR, 0, Math.PI * 2);
-  ctx.fillStyle = '#f0c040'; ctx.fill();
-  ctx.strokeStyle = '#8b5e0a'; ctx.lineWidth = 1.0; ctx.stroke();
-  ctx.fillStyle = '#3a1000';
-  ctx.font = `bold ${Math.round(mR * 1.3)}px serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('\u0391', lX, mCY);
-
-  ctx.strokeStyle = '#c8900a'; ctx.lineWidth = 1.2;
-  ctx.beginPath(); ctx.moveTo(rX, cStartY); ctx.lineTo(rX, cStartY + cLen); ctx.stroke();
-  ctx.beginPath(); ctx.arc(rX, mCY, mR, 0, Math.PI * 2);
-  ctx.fillStyle = '#f0c040'; ctx.fill();
-  ctx.strokeStyle = '#8b5e0a'; ctx.lineWidth = 1.0; ctx.stroke();
-  ctx.fillStyle = '#3a1000';
-  ctx.font = `bold ${Math.round(mR * 1.3)}px serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('\u03A9', rX, mCY);
-
-  ctx.restore();
-}
 
 // ── Rosa de los vientos 2D para la hoja izquierda ──
 function drawCompassRose(ctx, cx, cy, size) {
@@ -546,106 +495,6 @@ function makePageTexture(pageNum) {
   return tex;
 }
 
-// ── Textura reverso de pagina animada (cara inferior visible al doblar) ──
-/*function makePageBackTexture(pageNum) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512; canvas.height = 640;
-  const ctx = canvas.getContext('2d');
-
-  // Pre-mirror: BackSide invierte UV, esto lo compensa (doble inversión = correcto)
-  ctx.translate(512, 0);
-  ctx.scale(-1, 1);
-
-  ctx.fillStyle = '#f5f0e4';
-  ctx.fillRect(0, 0, 512, 640);
-
-  // Sombra en borde derecho (cuando la pagina llega al lado izquierdo)
-  const marginGrad = ctx.createLinearGradient(462, 0, 512, 0);
-  marginGrad.addColorStop(0, 'transparent');
-  marginGrad.addColorStop(1, 'rgba(160,120,60,0.14)');
-  ctx.fillStyle = marginGrad;
-  ctx.fillRect(462, 0, 50, 640);
-
-  ctx.strokeStyle = 'rgba(180,160,120,0.28)';
-  ctx.lineWidth = 1;
-  for (let y = 48; y < 640; y += 28) {
-    ctx.beginPath(); ctx.moveTo(20, y); ctx.lineTo(492, y); ctx.stroke();
-  }
-
-  ctx.fillStyle = '#8b6040';
-  ctx.font = 'italic 14px Georgia, serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('\u2014 ' + (pageNum * 2) + ' \u2014', 256, 22);
-
-  const backTitles = ['Gastronomia', 'Naturaleza', 'Historia'];
-  ctx.fillStyle = '#5c2a00';
-  ctx.font = 'bold 18px Georgia, serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(backTitles[(pageNum - 1) % 3], 256, 52);
-
-  ctx.strokeStyle = '#8b5e2a';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(60, 66); ctx.lineTo(452, 66); ctx.stroke();
-
-  ctx.fillStyle = '#1a0800';
-  ctx.font = 'bold 15px Georgia, serif';
-  ctx.textAlign = 'left';
-
-  const backContents = [
-    [
-      'La fabada asturiana es el',
-      'plato mas representativo:',
-      'alubias blancas con chorizo,',
-      'morcilla, lacon y tocino.',
-      '',
-      'La sidra natural se escancia',
-      'desde lo alto para airearla.',
-      'Es bebida y cultura a la vez.',
-      '',
-      'El queso Cabrales, azul y',
-      'curado en cuevas, es tesoro',
-      'gastronomico de fama mundial.',
-    ],
-    [
-      'Los Picos de Europa ofrecen',
-      'paisajes de roca y nieve,',
-      'rios verdes y valles remotos.',
-      '',
-      'La costa cantabrica guarda',
-      'playas virgenes entre acantilados',
-      'y puertos pesqueros historicos.',
-      '',
-      'Los bosques de roble y castano',
-      'cubren las laderas del interior,',
-      'refugio de osos y urogallos.',
-    ],
-    [
-      'En Covadonga, el ano 722,',
-      'Don Pelayo vencio al islam',
-      'e inicio la Reconquista.',
-      '',
-      'El preromanico asturiano,',
-      'del siglo IX, es Patrimonio',
-      'de la Humanidad por la UNESCO.',
-      '',
-      'Los castros celtas, los puertos',
-      'romanos y las iglesias goticas',
-      'narran siglos de historia viva.',
-    ],
-  ];
-
-  const lines = backContents[(pageNum - 1) % 3];
-  let lineY = 92;
-  lines.forEach(line => {
-    if (line === '') { lineY += 12; return; }
-    ctx.fillText(line, 24, lineY);
-    lineY += 26;
-  });
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}*/
 
 // ── Textura reverso de la última página (igual que leftOpen pero pre-invertida para BackSide) ──
 function makeLeftOpenBackTexture() {
@@ -1270,8 +1119,11 @@ function transitionToPhase3() {
   // Inicializar Leaflet tras el fade in
   setTimeout(initLeaflet, 450);
 
-  // Notificar AstuGuía que el libro está abierto
-  window.dispatchEvent(new CustomEvent('book:fase3ready'));
+  // Notificar AstuGuía que el libro está abierto.
+  // setTimeout(0) garantiza que todos los module scripts (guia-book.js) hayan
+  // registrado sus listeners antes de que el evento dispare — evita race condition
+  // cuando se salta la animación (bookReady sessionStorage flag).
+  setTimeout(() => window.dispatchEvent(new CustomEvent('book:fase3ready')), 0);
 }
 
 // ── Orientation overlay (solo en movil portrait) ──

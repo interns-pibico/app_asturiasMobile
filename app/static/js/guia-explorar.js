@@ -1,6 +1,6 @@
 // ── AstuGuía — Comentarista contextual en explorar.html ──
 import { SVG_PERSONAJE, typewriter, makeDraggable, loadPos } from './guia-utils.js';
-import { initChat, activateChat } from './guia-chat.js';
+import { initChat, activateChat, clearConversation } from './guia-chat.js';
 
 const overlay  = document.getElementById('guia-overlay');
 const textEl   = document.getElementById('guia-text');
@@ -58,10 +58,32 @@ function getTipComment(tipo) {
     'Nun lo tengo catalogao pero seguro que tien encanto 📍 ¡Descúbrelo tú!',
   ]);
   const t = tipo.toLowerCase();
-  // Gastronomía
-  if (t.includes('restaurant') || t.includes('bar') || t.includes('cafe') || t.includes('café') ||
-      t.includes('sidrería') || t.includes('sidrer') || t.includes('pub') || t.includes('fast_food') ||
-      t.includes('food'))
+  // Gastronomía — por subtipo (más específico primero)
+  if (t.includes('pub'))
+    return rnd([
+      '¡Esto ye pa la noche! Cócteles y mucha marcha 🍹',
+      '¡Pa\'l que busca animación y copas! Aquí ye la movida 🍹',
+      '¡El sitio pa\'l que quiere alargarlo un poco más! 🍹',
+    ]);
+  if (t.includes('cafe') || t.includes('café'))
+    return rnd([
+      '¡Un cafetín pa descansar los pies! Que\'l camín ye llargo ☕',
+      '¡Café, bollo y a seguir! Aquí recúperate ☕',
+      '¡Pa una merienda de las buenas! Nun pases de llargo ☕',
+    ]);
+  if (t.includes('bar') || t.includes('sidrería') || t.includes('sidrer'))
+    return rnd([
+      '¡Aquí nun falta la sidra ni la tertulia! Pa\'l que ye de buen vivir 🍺',
+      '¡Un bar como los de antes! Pide el culín y relájate 🍺',
+      '¡Buen ambiente asegurao! Sidra y conversación, lo que fae falta 🍺',
+    ]);
+  if (t.includes('fast_food'))
+    return rnd([
+      '¡Rápido y al grano! Pa cuando nun hai tiempo que perder 🍔',
+      '¡Que tien fame y prisa! Aquí te lo ponen enseguida 🍔',
+      '¡Algo rápido pa recargar pilas! Y a seguir de aventura 🍔',
+    ]);
+  if (t.includes('restaurant') || t.includes('food'))
     return rnd([
       '¡Aquí comese de escándalo! Pa el que tien fame claro 🍽️',
       '¡Farteste seguro! ¿Ties fame? 🍽️',
@@ -114,16 +136,17 @@ function getTipComment(tipo) {
   ]);
 }
 
-let autoHideTimer  = null;   // setTimeout para colapsar tras silencio
-let pendingDelay   = null;   // setTimeout del delay de say()
-let activeTypewriter = null; // setInterval del typewriter en curso
-let isOpen = false;
-let _guiaTimers = [];        // timers de sugerencia por categoría (cancelables)
+let autoHideTimer    = null;   // setTimeout para colapsar tras silencio
+let pendingDelay     = null;   // setTimeout del delay de say()
+let activeTypewriter = null;   // setInterval del typewriter en curso
+let isOpen           = false;
+let _guiaTimers      = [];     // timers de sugerencia por categoría (cancelables)
+let _filterSuppressed = false; // silenciar mientras el panel de filtros está abierto
 
 // ── Mostrar mensaje con typewriter ──
 // Cancela cualquier mensaje pendiente o en curso antes de iniciar el nuevo
 function say(msg, delay = 0) {
-  if (!overlay || !textEl) return;
+  if (!overlay || !textEl || _filterSuppressed) return;
 
   // Cancelar todo lo que esté en vuelo
   if (pendingDelay)   { clearTimeout(pendingDelay);   pendingDelay   = null; }
@@ -134,11 +157,11 @@ function say(msg, delay = 0) {
     if (!isOpen) showOverlay();
     activeTypewriter = typewriter(msg, textEl, () => {
       activeTypewriter = null;
+      // Auto-ocultar 8 segundos DESPUÉS de terminar de escribir
+      autoHideTimer = setTimeout(() => {
+        if (isOpen) collapseOverlay();
+      }, 8000);
     });
-    // Auto-ocultar tras 8 segundos tras terminar de escribir
-    autoHideTimer = setTimeout(() => {
-      if (isOpen) collapseOverlay();
-    }, 8000);
   };
 
   if (delay > 0) {
@@ -188,9 +211,10 @@ function init() {
     });
   }
 
-  // Inicializar chat — el bridge usa root automáticamente
+  // Inicializar chat con conversación limpia — evita contaminar con historial de book.html
   const appEl = document.getElementById('app-explorar');
   const root  = appEl?.dataset.root || '';
+  clearConversation();
   initChat({ root });
 
   // Mostrar overlay (solo personaje visible por defecto)
@@ -292,6 +316,30 @@ window.addEventListener('explorar:poiSelected', ({ detail }) => {
   if (!poi || !poi.nombre) return;
   say(`¡${poi.nombre}! ${getTipComment(poi.tipo)}`);
 });
+
+// ── Silenciar mientras el panel de filtros esté abierto ──
+window.addEventListener('explorar:filterOpen', () => {
+  _filterSuppressed = true;
+  _guiaTimers.forEach(id => clearTimeout(id));
+  _guiaTimers = [];
+  if (pendingDelay)     { clearTimeout(pendingDelay);      pendingDelay     = null; }
+  if (autoHideTimer)    { clearTimeout(autoHideTimer);     autoHideTimer    = null; }
+  if (activeTypewriter) { clearInterval(activeTypewriter); activeTypewriter = null; }
+  if (isOpen) collapseOverlay();
+});
+
+window.addEventListener('explorar:filterClose', () => {
+  _filterSuppressed = false;
+});
+
+// ── Cancelar auto-hide cuando el usuario interactúa con el chat ──
+// Solo cancela el timer de cierre automático; el typewriter sigue su curso
+const _chatInput = document.getElementById('guia-chat-input');
+if (_chatInput) {
+  _chatInput.addEventListener('focus', () => {
+    if (autoHideTimer) { clearTimeout(autoHideTimer); autoHideTimer = null; }
+  });
+}
 
 // ── Arrancar ──
 init();

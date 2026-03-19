@@ -1,4 +1,5 @@
 import * as THREE from '/static/vendor/three/three.module.js';
+import { stampPassport } from './passport.js';
 
 // ── Datos desde template ──
 const appEl = document.getElementById('app-explorar');
@@ -49,7 +50,7 @@ const CAT_EMOJI = {
   comer: '🍽️',
   ocio:         '🎭',
   tiendas:      '🛍️',
-  mercado:      '🥖',
+  mercado:      '🛒',
 };
 
 // ── Emojis por subtipo de comer ──
@@ -88,12 +89,14 @@ const TIENDAS_EMOJI = {
 // ── Emoji mercado por keyword match en nombre ──
 function getMercadoEmoji(nombre) {
   const n = (nombre || '').toLowerCase();
-  if (n.includes('sidra'))                                                                          return '🍾';
-  if (n.includes('queso') || n.includes('quesería') || n.includes('queseria'))                     return '🧀';
+  if (n.includes('llagar') || n.includes('sidrería') || n.includes('sidreria'))  return '🍾';
+  if (n.includes('sidra'))                                                        return '🍾';
+  if (n.includes('cerveza') || n.includes('cervecería') || n.includes('cerveceria') || n.includes('lúpulo') || n.includes('lupulo')) return '🍺';
+  if (n.includes('queso') || n.includes('quesería') || n.includes('queseria'))   return '🧀';
   if (n.includes('embutido') || n.includes('chorizo') || n.includes('salchich') || n.includes('charcuter')) return '🥩';
   if (n.includes('artesanía') || n.includes('artesania') || n.includes('cerámica') || n.includes('ceramica')) return '🏺';
-  if (n.includes('vino') || n.includes('vinoteca') || n.includes('bodega'))                        return '🍷';
-  return '🥖';
+  if (n.includes('vino') || n.includes('vinoteca') || n.includes('bodega'))      return '🍷';
+  return '🛒';
 }
 
 // ── Tags de filtro por subcategoría (hardcoded en JS) ──
@@ -255,6 +258,47 @@ scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xfffde0, 0.9);
 sun.position.set(20, 40, 20);
 scene.add(sun);
+
+// ── Día/Noche ──
+const DAYNIGHT_ZONES = [
+  { h:[0,6],  name:'madrugada', ambient:[0x101828,0.25], sun:[0x1a2840,0.05], sunPos:[-10,5,-10],  sky:0x0a0f1a, fog:[0x0d1520,30,60] },
+  { h:[6,8],  name:'amanecer',  ambient:[0xffb347,0.45], sun:[0xff7518,0.60], sunPos:[-20,8,20],   sky:0xe8804a, fog:[0xd4785a,35,70] },
+  { h:[8,18], name:'dia',       ambient:[0xffffff,0.80], sun:[0xfffde0,0.90], sunPos:[20,40,20],   sky:ES_COSTERO?0xc4dff0:0xc8e6f5, fog:[0xd4eaf7,40,80] },
+  { h:[18,20],name:'atardecer', ambient:[0xff9060,0.50], sun:[0xff6030,0.70], sunPos:[20,10,-20],  sky:0xd4603a, fog:[0xc85030,35,70] },
+  { h:[20,24],name:'noche',     ambient:[0x0a1428,0.30], sun:[0x304060,0.10], sunPos:[0,30,0],     sky:0x060c18, fog:[0x080e20,25,55] },
+];
+
+// Estrellas para noche/madrugada
+const starGeo = new THREE.BufferGeometry();
+const starPos = new Float32Array(200 * 3);
+for (let i = 0; i < 200; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi   = Math.acos(2 * Math.random() - 1);
+  starPos[i*3]   = 60 * Math.sin(phi) * Math.cos(theta);
+  starPos[i*3+1] = Math.abs(60 * Math.cos(phi));
+  starPos[i*3+2] = 60 * Math.sin(phi) * Math.sin(theta);
+}
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false }));
+stars.visible = false;
+scene.add(stars);
+
+function applyDayNight() {
+  const h    = new Date().getHours();
+  const zone = DAYNIGHT_ZONES.find(z => h >= z.h[0] && h < z.h[1]) || DAYNIGHT_ZONES[2];
+  ambient.color.setHex(zone.ambient[0]);
+  ambient.intensity = zone.ambient[1];
+  sun.color.setHex(zone.sun[0]);
+  sun.intensity = zone.sun[1];
+  sun.position.set(...zone.sunPos);
+  scene.background.setHex(zone.sky);
+  renderer.setClearColor(zone.sky, 1);
+  scene.fog.color.setHex(zone.fog[0]);
+  scene.fog.near = zone.fog[1];
+  scene.fog.far  = zone.fog[2];
+  stars.visible  = zone.name === 'noche' || zone.name === 'madrugada';
+  appEl.dataset.daynight = zone.name;
+}
 
 // ── Outline BackSide helper ──
 function OL(mesh, color = PASTEL.outline, scale = 1.04) {
@@ -548,6 +592,7 @@ let hoveredPin = null;
 // Estado mercado
 let allMercadoItems = [];
 let mercadoQuery = '';
+let mercadoCat   = '';   // slug categoría servidor: gastro|sidra-bebidas|artesania|dulce|huerta-campo
 
 // ── Baliza sugerida por AstuGuía ──
 let suggestedPin   = null;   // sprite destacado (POI)
@@ -1079,6 +1124,41 @@ function coordsToLatLngs(coords) {
   return flat.map(([lon, lat]) => [lat, lon]);
 }
 
+function renderElevationProfile(svgEl, ascenso, descenso, distKm) {
+  svgEl.innerHTML = '';
+  const total = ascenso + descenso;
+  if (total <= 0) return;
+  const maxH   = Math.max(ascenso, descenso);
+  const peakX  = 200 * ascenso / total;
+  const peakY  = 55 - (ascenso / maxH) * 45;
+  const endY   = Math.max(0, Math.min(55, 55 - ((ascenso - descenso) / maxH) * 45));
+  const col    = '#' + (ROUTE_COLORS[CAT] || 0x00e676).toString(16).padStart(6, '0');
+  const NS     = 'http://www.w3.org/2000/svg';
+
+  const area = document.createElementNS(NS, 'path');
+  area.setAttribute('d', `M 0 55 L ${peakX} ${peakY} L 200 ${endY} L 200 55 Z`);
+  area.setAttribute('fill', col); area.setAttribute('fill-opacity', '0.25');
+  svgEl.appendChild(area);
+
+  const line = document.createElementNS(NS, 'path');
+  line.setAttribute('d', `M 0 55 L ${peakX} ${peakY} L 200 ${endY}`);
+  line.setAttribute('fill', 'none'); line.setAttribute('stroke', col);
+  line.setAttribute('stroke-width', '2'); line.setAttribute('stroke-opacity', '0.9');
+  svgEl.appendChild(line);
+
+  const lblPeak = document.createElementNS(NS, 'text');
+  lblPeak.setAttribute('x', peakX); lblPeak.setAttribute('y', Math.max(peakY - 4, 8));
+  lblPeak.setAttribute('text-anchor', 'middle'); lblPeak.setAttribute('font-size', '8');
+  lblPeak.setAttribute('fill', '#f5ead0'); lblPeak.textContent = `↑${ascenso}m`;
+  svgEl.appendChild(lblPeak);
+
+  const lblDist = document.createElementNS(NS, 'text');
+  lblDist.setAttribute('x', '196'); lblDist.setAttribute('y', '54');
+  lblDist.setAttribute('text-anchor', 'end'); lblDist.setAttribute('font-size', '7');
+  lblDist.setAttribute('fill', 'rgba(200,160,80,0.7)'); lblDist.textContent = `${distKm}km`;
+  svgEl.appendChild(lblDist);
+}
+
 function openRoutePanel(data) {
   const sidebar = document.getElementById('route-sidebar');
 
@@ -1102,6 +1182,18 @@ function openRoutePanel(data) {
     desnivelRow.style.display = 'flex';
   } else {
     desnivelRow.style.display = 'none';
+  }
+
+  // Perfil de elevación esquemático
+  const elevEl = document.getElementById('rds-elevation-profile');
+  if (data.ascenso_m && data.distancia_km) {
+    renderElevationProfile(
+      document.getElementById('rds-elevation-svg'),
+      data.ascenso_m, data.descenso_m || 0, data.distancia_km
+    );
+    elevEl.style.display = '';
+  } else {
+    elevEl.style.display = 'none';
   }
 
   // Filas meta — ocultar las vacías
@@ -1257,13 +1349,31 @@ function applyMercadoFilter() {
   });
 }
 
+// ── Helpers de paneles de filtro ──
+function closePanels() {
+  const fp  = document.getElementById('cat-filter-panel');
+  const mfp = document.getElementById('mercado-filter-panel');
+  const wasOpen = fp?.classList.contains('panel-open') || mfp?.classList.contains('panel-open');
+  fp?.classList.remove('panel-open');
+  mfp?.classList.remove('panel-open');
+  appEl.classList.remove('filter-open');
+  if (wasOpen) window.dispatchEvent(new CustomEvent('explorar:filterClose'));
+}
+
+function openPanel(panelEl) {
+  closePanels();
+  panelEl.classList.add('panel-open');
+  appEl.classList.add('filter-open');
+  window.dispatchEvent(new CustomEvent('explorar:filterOpen'));
+}
+
 // ── Filtro subcategoría server-side (comer / ocio / tiendas) ──
 function reloadWithFilter() {
   posGrid.clear();
   for (const s of fallingItems) scene.remove(s);
   fallingItems.length = 0;
   loadedOffset = 0; serverTotal = 0; totalItems = 0;
-  document.getElementById('cat-filter-panel').style.display = 'none';
+  closePanels();
   loadCategory();
 }
 
@@ -1289,31 +1399,23 @@ function updateFilterPanel(cat) {
   }
   const filterBtn = document.getElementById('cat-sb-filter-btn');
   if (filterBtn) filterBtn.style.visibility = (tags || cat === 'mercado') ? 'visible' : 'hidden';
+  const filterBarBtn = document.getElementById('cat-filter-bar-btn');
+  if (filterBarBtn) filterBarBtn.style.display = (tags || cat === 'mercado') ? 'flex' : 'none';
 }
 
 // ── initAllFilterPanels — listeners globales (una sola vez) ──
 function initAllFilterPanels() {
-  document.getElementById('cfp-close')?.addEventListener('click', () => {
-    document.getElementById('cat-filter-panel').style.display = 'none';
-  });
-  document.getElementById('cfp-apply')?.addEventListener('click', () => {
-    reloadWithFilter();
-  });
+  document.getElementById('cfp-close')?.addEventListener('click', closePanels);
+  document.getElementById('cfp-apply')?.addEventListener('click', () => { reloadWithFilter(); });
 
-  document.getElementById('mfp-close')?.addEventListener('click', () => {
-    document.getElementById('mercado-filter-panel').style.display = 'none';
-  });
+  document.getElementById('mfp-close')?.addEventListener('click', closePanels);
   document.querySelectorAll('.mfp-tag').forEach(tag => {
     tag.addEventListener('click', () => {
-      document.getElementById('mfp-search').value = tag.dataset.q;
       document.querySelectorAll('.mfp-tag').forEach(t => t.classList.remove('active'));
       tag.classList.add('active');
+      mercadoCat = tag.dataset.cat || '';
+      reloadWithFilter();
     });
-  });
-  document.getElementById('mfp-apply')?.addEventListener('click', () => {
-    mercadoQuery = document.getElementById('mfp-search').value.trim().toLowerCase();
-    document.getElementById('mercado-filter-panel').style.display = 'none';
-    applyMercadoFilter();
   });
 }
 
@@ -1432,6 +1534,7 @@ async function loadCategory() {
     const sep = baseUrl.includes('?') ? '&' : '?';
     let url = baseUrl + sep + `limit=30&offset=${offset}`;
     if (catFilterTipo) url += `&tipo=${catFilterTipo}`;
+    if (CAT === 'mercado' && mercadoCat) url += `&categoria=${mercadoCat}`;
     try {
       const resp = await fetch(url);
       if (!resp.ok) return { items: [], total: 0 };
@@ -1535,8 +1638,7 @@ async function switchCategory(newCat) {
     b.classList.toggle('active', b.dataset.cat === CAT));
 
   // Cerrar paneles
-  document.getElementById('cat-filter-panel').style.display = 'none';
-  document.getElementById('mercado-filter-panel').style.display = 'none';
+  closePanels();
   document.getElementById('load-more-btn').style.display = 'none';
 
   // Esperar que los sprites vuelen (450ms)
@@ -1552,6 +1654,7 @@ async function switchCategory(newCat) {
   totalItems = 0; loadedOffset = 0; serverTotal = 0;
   allMercadoItems = [];
   catFilterTipo = '';
+  mercadoCat    = '';
 
   updateFilterPanel(CAT);
   await loadCategory();
@@ -1566,23 +1669,28 @@ document.querySelectorAll('.cat-bar-btn, .cat-sb-btn[data-cat]').forEach(btn => 
 document.getElementById('cat-sidebar-toggle')?.addEventListener('click', () => {
   document.getElementById('cat-sidebar')?.classList.toggle('expanded');
   document.getElementById('app-explorar')?.classList.toggle('sidebar-expanded');
+  document.body.classList.toggle('sidebar-expanded');
 });
 
-// ── Sidebar filter button → abre panel correcto según CAT ──
-document.getElementById('cat-sb-filter-btn')?.addEventListener('click', () => {
+// ── Filter button → abre panel correcto según CAT ──
+function openFilterPanel() {
   const isPoi = !!CAT_FILTER_TAGS[CAT];
   const isMercado = CAT === 'mercado';
+  const fp  = document.getElementById('cat-filter-panel');
+  const mfp = document.getElementById('mercado-filter-panel');
   if (isPoi) {
-    const fp = document.getElementById('cat-filter-panel');
-    fp.style.display = fp.style.display === 'flex' ? 'none' : 'flex';
+    fp.classList.contains('panel-open') ? closePanels() : openPanel(fp);
   } else if (isMercado) {
-    const mfp = document.getElementById('mercado-filter-panel');
-    mfp.style.display = mfp.style.display === 'flex' ? 'none' : 'flex';
+    mfp.classList.contains('panel-open') ? closePanels() : openPanel(mfp);
   }
-});
+}
+document.getElementById('cat-sb-filter-btn')?.addEventListener('click', openFilterPanel);
+document.getElementById('cat-filter-bar-btn')?.addEventListener('click', openFilterPanel);
 
 // ── Init ──
 async function init() {
+  stampPassport(MUNICIPIO_ID, MUNICIPIO_NOMBRE);
+
   const concejo_key = 'explorar_concejo';
   const isFirstVisit = sessionStorage.getItem(concejo_key) !== String(MUNICIPIO_ID);
   sessionStorage.setItem(concejo_key, String(MUNICIPIO_ID));
@@ -1596,11 +1704,33 @@ async function init() {
   if (GEOJSON_RAW) {
     buildPlatform(GEOJSON_RAW);
   }
+  applyDayNight();
 
   if (isFirstVisit) setLoadingProgress(0.5);
 
   initAllFilterPanels();
   updateFilterPanel(CAT);
+
+  // Pre-aplicar cat_filter desde URL (viene del chat cuando recomienda mercado+subcategoría)
+  const urlCatFilter = new URLSearchParams(window.location.search).get('cat_filter');
+  if (urlCatFilter && CAT === 'mercado') {
+    mercadoCat = urlCatFilter;
+    document.querySelectorAll('.mfp-tag').forEach(t => {
+      t.classList.toggle('active', (t.dataset.cat || '') === urlCatFilter);
+    });
+  }
+
+  // Pre-aplicar filtro tipo desde URL (ej: viene del wizard con &tipo=cafe)
+  const urlTipo = new URLSearchParams(window.location.search).get('tipo');
+  if (urlTipo && CAT_FILTER_TAGS[CAT]) {
+    catFilterTipo = urlTipo;
+    const tagsEl = document.getElementById('cfp-tags');
+    if (tagsEl) {
+      tagsEl.querySelectorAll('.cfp-tag').forEach(t => {
+        t.classList.toggle('active', t.dataset.tipo === urlTipo);
+      });
+    }
+  }
 
   // Notificar AstuGuía ANTES de cargar categoría, para que la bienvenida sea siempre el primer mensaje
   window.dispatchEvent(new CustomEvent('explorar:ready', {

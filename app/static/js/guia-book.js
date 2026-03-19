@@ -9,10 +9,12 @@ function rnd(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 // ── Estado del wizard ──
 const state = {
-  tipo:       null,   // rutas | gastro | cultura | tiendas
-  subtipo:    null,   // ciclismo | senderismo | ... | comer | ...
-  zona:       null,   // costero | interior | sorpresa
-  playerName: null,   // capturado en s0
+  tipo:            null,   // rutas | gastro | cultura | tiendas
+  subtipo:         null,   // ciclismo | senderismo | ... | restaurant | cafe | bar | pub | fast_food
+  zona:            null,   // costero | interior | sorpresa
+  cuisine:         null,   // regional | other | null
+  municipio_input: null,   // nombre de municipio escrito por el usuario (opcional)
+  playerName:      null,   // capturado en s0
 };
 
 // ── Tracker de paso actual (para restaurar tras cerrar chat) ──
@@ -51,7 +53,7 @@ const STEPS = {
     text: '¿Qué ye lo que quies facer? sudar, comer o culturizate',
     choices: [
       { label: '🚴 Rutas y deporte', set: { tipo: 'rutas' },   next: 's2a' },
-      { label: '🍽️ Gastronomía',     set: { tipo: 'gastro' },  next: 's2b' },
+      { label: '🍽️ Gastronomía',     set: { tipo: 'gastro' },  next: 's2b_loc' },
       { label: '🏛️ Cultura y ocio',  set: { tipo: 'cultura' }, next: 's2c' },
       { label: '🛍️ Tiendas',         set: { tipo: 'tiendas', subtipo: 'tiendas' }, next: 's3' },
     ],
@@ -59,18 +61,39 @@ const STEPS = {
   s2a: {
     text: '¡Eso gustame más! ¿Tienes los pies pal monte o quies pedalear?',
     choices: [
-      { label: '🚴 Bicicleta',     set: { subtipo: 'ciclismo' },      next: 's3' },
-      { label: '🥾 Senderismo',    set: { subtipo: 'senderismo' },    next: 's3' },
-      { label: '🌿 Vía Verde',     set: { subtipo: 'sendas_verdes' }, next: 's3' },
-      { label: '🚶 Paseo tranquilo', set: { subtipo: 'paseos' },      next: 's3' },
+      { label: '🚴 Bicicleta',       set: { subtipo: 'ciclismo' },      next: 's3' },
+      { label: '🥾 Senderismo',      set: { subtipo: 'senderismo' },    next: 's3' },
+      { label: '🌿 Vía Verde',       set: { subtipo: 'sendas_verdes' }, next: 's3' },
+      { label: '🚶 Paseo tranquilo', set: { subtipo: 'paseos' },        next: 's3' },
     ],
   },
-  s2b: {
-    text: '¡Ahora si nos entendemos! En Asturias comese de maravilla 🧀 ¿qué te apetez?',
+  s2b_loc: {
+    text: '¡Ahora si nos entendemos! ¿En qué conceyu andas o te quies mover? (o sáltalo si te da igual)',
+    // sin choices — gestionado con showMunicipioInput()
+  },
+  s2b_zona: {
+    text: '¿Prefieres costa o monte?',
     choices: [
-      { label: '🍴 Restaurantes',   set: { subtipo: 'comer' }, next: 's3' },
-      { label: '🏪 Mercado local',  set: { subtipo: 'mercado' },      next: 's3' },
-      { label: '🍺 Sidrerías',      set: { subtipo: 'comer' }, next: 's3' },
+      { label: '🌊 Costa',         set: { zona: 'costero' },  next: 's2c_food' },
+      { label: '🏔️ Interior',      set: { zona: 'interior' }, next: 's2c_food' },
+      { label: '🗺️ Sorpréndeme',   set: { zona: 'sorpresa' }, next: 's2c_food' },
+    ],
+  },
+  s2c_food: {
+    text: '¿Qué te apetez? 🧀',
+    choices: [
+      { label: '🍴 Comer algo',      set: {},                              next: 's2d_comida' },
+      { label: '☕ Café y merienda', set: { subtipo: 'cafe' },             next: 's4' },
+      { label: '🍺 Sidra / cerveza', set: { subtipo: 'bar' },              next: 's4' },
+      { label: '🍹 Cócteles / copas', set: { subtipo: 'pub' },             next: 's4' },
+    ],
+  },
+  s2d_comida: {
+    text: '¿Qué cocina te fae más tilín?',
+    choices: [
+      { label: '🫕 Cocina asturiana',  set: { subtipo: 'restaurant', cuisine: 'regional' }, next: 's4' },
+      { label: '🌍 Internacional',      set: { subtipo: 'restaurant', cuisine: 'other' },   next: 's4' },
+      { label: '🍔 Algo rápido',        set: { subtipo: 'fast_food',  cuisine: null },       next: 's4' },
     ],
   },
   s2c: {
@@ -91,11 +114,13 @@ const STEPS = {
   },
 };
 
-// ── Obtener recomendación ──
+// ── Obtener recomendación (fallback hardcodeado) ──
 function getRecommendation() {
   const sub  = state.subtipo || 'comer';
   const zona = state.zona    || 'costero';
-  const pool = FEATURED[sub] || FEATURED.comer;
+  // Mapear subtipos gastro nuevos → clave FEATURED
+  const featKey = ['restaurant','cafe','bar','pub','fast_food'].includes(sub) ? 'comer' : sub;
+  const pool = FEATURED[featKey] || FEATURED.comer;
 
   let list;
   if (zona === 'sorpresa') {
@@ -105,6 +130,28 @@ function getRecommendation() {
   }
   if (!list.length) list = [{ id: 24, n: 'Gijón' }];
   return list[Math.floor(Math.random() * list.length)];
+}
+
+// ── Fetch recomendación real desde la BD ──
+async function fetchRecommendation() {
+  try {
+    const sub = state.subtipo || 'restaurant';
+    // Solo subtipos válidos para el endpoint
+    const validSubtipos = ['restaurant', 'cafe', 'bar', 'pub', 'fast_food'];
+    if (!validSubtipos.includes(sub)) return getRecommendation();
+
+    const params = new URLSearchParams({ subtipo: sub, zona: state.zona || 'sorpresa' });
+    if (state.cuisine) params.set('cuisine', state.cuisine);
+    if (state.municipio_input) params.set('municipio', state.municipio_input);
+
+    const res = await fetch(ROOT + '/api/guia/recommendations?' + params.toString());
+    if (!res.ok) throw new Error('fetch failed');
+    const data = await res.json();
+    if (data && data.length) {
+      return { id: data[0].id, n: data[0].nombre, num_pois: data[0].num_pois };
+    }
+  } catch (_) { /* fallback */ }
+  return getRecommendation();
 }
 
 // ── UI helpers ──
@@ -157,15 +204,58 @@ function showNameCapture() {
   setTimeout(() => inp.focus(), 50);
 }
 
+function showMunicipioInput() {
+  choicesEl.innerHTML = '';
+
+  const row = document.createElement('div');
+  row.className = 'guia-name-row';
+
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'guia-name-input';
+  inp.placeholder = 'Ej: Gijón, Llanes…';
+  inp.maxLength = 40;
+
+  const btnOk = document.createElement('button');
+  btnOk.className = 'guia-btn';
+  btnOk.textContent = '¡Pa allá!';
+
+  const btnSkip = document.createElement('button');
+  btnSkip.className = 'guia-btn';
+  btnSkip.textContent = '¡No importa!';
+  btnSkip.style.cssText = 'background:rgba(255,255,255,0.15);color:#2d1a0e;';
+
+  const confirmMunicipio = () => {
+    const val = inp.value.trim();
+    state.municipio_input = val || null;
+    choicesEl.innerHTML = '';
+    if (val) {
+      typewriter(`¡Guay! Busco lo mejor pal conceyu de ${val}…`, textEl, () => setTimeout(() => showStep('s2c_food'), 700));
+    } else {
+      showStep('s2b_zona');
+    }
+  };
+
+  btnOk.addEventListener('click', confirmMunicipio);
+  btnSkip.addEventListener('click', () => { state.municipio_input = null; showStep('s2b_zona'); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); confirmMunicipio(); } });
+
+  row.appendChild(inp);
+  row.appendChild(btnOk);
+  choicesEl.appendChild(row);
+  choicesEl.appendChild(btnSkip);
+  setTimeout(() => inp.focus(), 50);
+}
+
 function showStep(stepId) {
   currentStepId = stepId;
   lastResultRec = null;
   const step = STEPS[stepId];
   if (!step) return;
   choicesEl.innerHTML = '';
-  const onDone = stepId === 's0'
-    ? showNameCapture
-    : () => renderChoices(step.choices, stepId);
+  const onDone = stepId === 's0'       ? showNameCapture
+               : stepId === 's2b_loc'  ? showMunicipioInput
+               : () => renderChoices(step.choices, stepId);
   typewriter(step.text, textEl, onDone);
 }
 
@@ -192,7 +282,10 @@ function handleChoice(c) {
 }
 
 function renderResultButtons(rec) {
-  const cat = state.subtipo || 'comer';
+  // Mapear subtipos gastro → categoría de explorar.html
+  const GASTRO_TIPOS = new Set(['restaurant', 'cafe', 'bar', 'pub', 'fast_food']);
+  const sub = state.subtipo || 'comer';
+  const cat = GASTRO_TIPOS.has(sub) ? 'comer' : sub;
   choicesEl.innerHTML = '';
   const btnIr = document.createElement('button');
   btnIr.className = 'guia-btn';
@@ -200,7 +293,10 @@ function renderResultButtons(rec) {
   btnIr.addEventListener('click', () => {
     // Marcar que venimos del wizard para que explorar.html abra AstuGuía automáticamente
     sessionStorage.setItem('astuguia_from_wizard', '1');
-    location.href = ROOT + '/explorar/' + rec.id + '?cat=' + cat;
+    // Pasar tipo para pre-filtrar en explorar.html
+    let url = ROOT + '/explorar/' + rec.id + '?cat=' + cat;
+    if (GASTRO_TIPOS.has(sub)) url += '&tipo=' + sub;
+    location.href = url;
   });
   const btnMap = document.createElement('button');
   btnMap.className = 'guia-btn';
@@ -213,17 +309,23 @@ function renderResultButtons(rec) {
   choicesEl.appendChild(btnMap);
 }
 
-function showResult() {
+async function showResult() {
   currentStepId = '__result__';
-  const rec = getRecommendation();
-  lastResultRec = rec;
+  lastResultRec = null;
   choicesEl.innerHTML = '';
 
+  // Mostrar mensaje de carga mientras consultamos la BD
+  textEl.textContent = 'Dame un momentín, busco el mejor sitiu pa ti… 🔍';
+
+  const rec = await fetchRecommendation();
+  lastResultRec = rec;
+
   const n = state.playerName ? `${state.playerName}, ` : '';
+  const countInfo = rec.num_pois ? ` — hay ${rec.num_pois} sitios` : '';
   const resultText = rnd([
-    `¡Buah! Pa lo que busques, ${n}${rec.n} ye lo tuyo. ¡Confirmao!`,
-    `Sin duda alguna: ${n}${rec.n}. Va a prestate, digotelo yo 🤝`,
-    `Recomiendote: ${n}${rec.n}. ¡Ye lo mejor pa ti!`,
+    `¡Buah! Pa lo que busques, ${n}${rec.n} ye lo tuyo${countInfo}. ¡Confirmao!`,
+    `Sin duda alguna: ${n}${rec.n}${countInfo}. Va a prestate, digotelo yo 🤝`,
+    `Recomiendote: ${n}${rec.n}${countInfo}. ¡Ye lo mejor pa ti!`,
   ]);
 
   typewriter(resultText, textEl, () => renderResultButtons(rec));
@@ -236,6 +338,8 @@ function restoreCurrentStep() {
     renderResultButtons(lastResultRec);
   } else if (currentStepId === 's0') {
     showNameCapture();
+  } else if (currentStepId === 's2b_loc') {
+    showMunicipioInput();
   } else {
     const step = STEPS[currentStepId];
     if (step?.choices) renderChoices(step.choices, currentStepId);

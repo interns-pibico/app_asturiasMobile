@@ -3,8 +3,9 @@
 const SVG_EXPAND   = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6V1h5"/><path d="M10 1h5v5"/><path d="M15 10v5h-5"/><path d="M6 15H1v-5"/></svg>`;
 const SVG_MINIMIZE = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1v5H1"/><path d="M15 6h-5V1"/><path d="M10 15v-5h5"/><path d="M1 10h5v5"/></svg>`;
 
-// Session key for conversation persistence
-const CONV_KEY = 'aguia_conv_nb_4c0b0100c552';
+// Session key para conversación — único por página (book vs explorar/24 vs explorar/43)
+// Así book.html y explorar.html nunca comparten historial de conversación
+const CONV_KEY = 'aguia_conv_' + window.location.pathname.replace(/\//g, '_').replace(/^_/, '');
 
 let _root         = '';
 let _awaitingName = false;
@@ -68,13 +69,14 @@ async function callBridgeStream(message, extraContext = {}) {
 
   const payload = {
     message,
-    context_type:   extraContext.context_type   || 'chat',
-    municipio_id:   ctx.municipio_id            || extraContext.municipio_id  || null,
-    categoria:      ctx.categoria               || extraContext.categoria     || null,
-    wizard_state:   extraContext.wizard_state   || null,
-    poi_id:         extraContext.poi_id         || null,
-    conversation_id: sessionStorage.getItem(CONV_KEY) || null,
-    player_name:    name,
+    context_type:     extraContext.context_type   || 'chat',
+    municipio_id:     ctx.municipio_id            || extraContext.municipio_id    || null,
+    municipio_nombre: ctx.municipio_nombre        || extraContext.municipio_nombre || null,
+    categoria:        ctx.categoria               || extraContext.categoria        || null,
+    wizard_state:     extraContext.wizard_state   || null,
+    poi_id:           extraContext.poi_id         || null,
+    conversation_id:  sessionStorage.getItem(CONV_KEY) || null,
+    player_name:      name,
   };
 
   return fetch(`${root}/api/guia/chat`, {
@@ -85,7 +87,7 @@ async function callBridgeStream(message, extraContext = {}) {
 }
 
 // ── Streaming SSE via bridge (exported for wizard + explorar) ──
-export async function sendMessage(message, onChunk, onDone, onError, extraContext = {}) {
+export async function sendMessage(message, onChunk, onDone, onError, extraContext = {}, onProgress = null) {
   let response;
   try {
     response = await callBridgeStream(message, extraContext);
@@ -134,6 +136,17 @@ export async function sendMessage(message, onChunk, onDone, onError, extraContex
         eventName = null;
         continue;
       }
+
+      // Progress event: update spinner text while model is thinking/searching
+      if (eventName === 'progress') {
+        try {
+          const prog = JSON.parse(dataStr);
+          if (onProgress) onProgress(prog);
+        } catch { /* ignore */ }
+        eventName = null;
+        continue;
+      }
+
       eventName = null;
 
       // Normal data chunk
@@ -205,22 +218,51 @@ const CATEGORY_KEYWORDS = [
   { cat: 'ciclismo',      words: ['bicicleta', 'ciclismo', 'ruta ciclista', 'en bici'] },
   { cat: 'senderismo',    words: ['senderismo', 'senda', 'ruta de montana', 'ruta de montaña', 'trekking', 'hiking'] },
   { cat: 'paseos',        words: ['paseo', 'pasear', 'caminata', 'caminar'] },
-  { cat: 'mercado',       words: ['mercado', 'mercadillo', 'productos locales', 'artesania', 'artesanía'] },
-  { cat: 'comer',         words: ['restaurante', 'gastronomia', 'gastronomía', 'sidra', 'sidreria', 'sidrera',
-                                   'comer', 'comida', 'fabada', 'queso', 'cocina', 'marisco', 'pescado',
+  // mercado ANTES de comer — comprar productos locales no es comer
+  { cat: 'mercado',       words: ['donde comprar', 'dónde comprar', 'comprar', 'llagar', 'quesería', 'queseria',
+                                   'sidrería', 'sidreria', 'tienda de productos', 'productos locales',
+                                   'artesania', 'artesanía', 'mercadillo', 'comercio local',
+                                   'tienda asturiana', 'productos tipicos', 'productos típicos'] },
+  { cat: 'comer',         words: ['restaurante', 'gastronomia', 'gastronomía', 'sidrería donde comer',
+                                   'comer', 'comida', 'fabada', 'cocina', 'marisco', 'pescado',
                                    'cachopo', 'pote asturiano', 'bar', 'tasca', 'cenar', 'almorzar'] },
   { cat: 'ocio',          words: ['monumento', 'museo', 'cultura', 'arte', 'mirador', 'teatro', 'iglesia',
                                    'catedral', 'castillo', 'patrimonio', 'exposicion', 'exposición',
                                    'arquitectura', 'historico', 'histórico', 'visitar', 'conocer', 'ver'] },
-  { cat: 'tiendas',       words: ['tienda', 'compras', 'shopping', 'comercio', 'boutique', 'donde comprar'] },
+  { cat: 'tiendas',       words: ['tienda', 'compras', 'shopping', 'boutique'] },
 ];
 
-function detectCategory(text) {
+// Devuelve null si no hay match claro (evita falsos positivos en explorar)
+function detectCategory(text, { fallback = 'ocio' } = {}) {
   const norm = normalize(text);
   for (const { cat, words } of CATEGORY_KEYWORDS) {
     if (words.some(w => norm.includes(normalize(w)))) return cat;
   }
-  return 'ocio';
+  return fallback;
+}
+
+// Etiquetas legibles para el botón de categoría en explorar.html
+const CAT_LABELS = {
+  ciclismo:      'Rutas en Bici',
+  senderismo:    'Senderismo',
+  sendas_verdes: 'Sendas Verdes',
+  carril_bici:   'Carril Bici',
+  paseos:        'Paseos',
+  comer:         'Restaurantes',
+  ocio:          'Ocio y Cultura',
+  tiendas:       'Tiendas',
+  mercado:       'Mercado',
+};
+
+// ── Detectar subcategoría de mercado (para filtro server-side) ──
+function detectMercadoSubcat(text) {
+  const n = normalize(text);
+  if (n.includes('sidra') || n.includes('llagar') || n.includes('sidreria') || n.includes('cerveza') || n.includes('cerveceria')) return 'sidra-bebidas';
+  if (n.includes('queso') || n.includes('queseria') || n.includes('cabrales') || n.includes('gamone') || n.includes('embutido') || n.includes('chorizo') || n.includes('charcuter') || n.includes('conserva')) return 'gastro';
+  if (n.includes('artesania') || n.includes('ceramica') || n.includes('artesanal')) return 'artesania';
+  if (n.includes('dulce') || n.includes('reposteria') || n.includes('pasteleria') || n.includes('carbayones')) return 'dulce';
+  if (n.includes('huerta') || n.includes('verdura') || n.includes('fabe') || n.includes('legumbre') || n.includes('manzana')) return 'huerta-campo';
+  return '';
 }
 
 // ── Enviar mensaje ──
@@ -270,34 +312,65 @@ async function handleSend() {
       }
     },
     async (fullText) => {
+      // Limpiar spinner zombie si no llegó contenido
+      if (!fullText && dots) { dots.remove(); dots = null; }
+
       // 1. Red de seguridad fallback
       const displayText = postProcessResponse(fullText);
       if (botDiv && displayText !== fullText) botDiv.innerHTML = miniMd(displayText);
 
-      // 2. Detectar municipio: NAV tag explícito primero, si no → primer match
-      const municipio = await detectNavTag(fullText) || await detectMunicipio(fullText);
-
-      // 3. Strip [NAV:xxx] del texto visible
+      // 2. Strip [NAV:xxx] del texto visible (siempre, en ambas vistas)
       if (botDiv) {
         const clean = displayText.replace(/\s*\[NAV:[^\]]*\]/gi, '').trim();
         botDiv.innerHTML = miniMd(clean);
       }
 
-      // 4. Botón de navegación — inline en el historial del chat (no toca #guia-choices del wizard)
-      if (municipio) {
-        const history = $('guia-chat-history');
-        if (history) {
+      const history = $('guia-chat-history');
+      const ctx = window.ASTUGUIA_CONTEXT || {};
+      const isExplorar = !!ctx.municipio_id;
+
+      if (isExplorar) {
+        // ── explorar.html: botón de cambio de categoría en el mismo concejo ──
+        // Solo si la categoría detectada difiere de la actual (sin fallback ocio para evitar falsos positivos)
+        const detectedCat = detectCategory(fullText, { fallback: null });
+        const currentCat  = ctx.categoria || '';
+        if (detectedCat && detectedCat !== currentCat && history) {
+          const catLabel = CAT_LABELS[detectedCat] || detectedCat;
+          const btn = document.createElement('button');
+          btn.className = 'guia-btn guia-btn-nav';
+          btn.textContent = `🗺️ Ir a la categoría ${catLabel} de ${ctx.municipio_nombre}`;
+          btn.addEventListener('click', () => {
+            let url = getRoot() + '/explorar/' + ctx.municipio_id + '?cat=' + detectedCat;
+            if (detectedCat === 'mercado') {
+              const subcat = detectMercadoSubcat(fullText);
+              if (subcat) url += '&cat_filter=' + subcat;
+            }
+            location.href = url;
+          });
+          history.appendChild(btn);
+          history.scrollTop = history.scrollHeight;
+        }
+      } else {
+        // ── book.html: botón de navegación a municipio ──
+        const municipio = await detectNavTag(fullText) || await detectMunicipio(fullText);
+        if (municipio && history) {
           const btn = document.createElement('button');
           btn.className = 'guia-btn guia-btn-nav';
           btn.textContent = `🗺️ Ir a ${municipio.nombre}`;
           btn.addEventListener('click', () => {
             const cat = detectCategory(fullText);
-            location.href = getRoot() + '/explorar/' + municipio.id + '?cat=' + cat;
+            let url = getRoot() + '/explorar/' + municipio.id + '?cat=' + cat;
+            if (cat === 'mercado') {
+              const subcat = detectMercadoSubcat(fullText);
+              if (subcat) url += '&cat_filter=' + subcat;
+            }
+            location.href = url;
           });
           history.appendChild(btn);
           history.scrollTop = history.scrollHeight;
         }
       }
+
       input.disabled = false;
       if (sendBtn) sendBtn.disabled = false;
       input.focus();
@@ -307,6 +380,10 @@ async function handleSend() {
       appendMessage('bot', '⚠️ ' + errMsg);
       input.disabled = false;
       if (sendBtn) sendBtn.disabled = false;
+    },
+    {},
+    (prog) => {
+      if (dots && prog.msg) dots.innerHTML = prog.msg + ' <span></span><span></span><span></span>';
     }
   );
 }
@@ -333,6 +410,11 @@ function showInitialGreeting() {
     appendMessage('bot', 'Hola, ¿Cómo te llames?');
     _awaitingName = true;
   }
+}
+
+// ── Borrar conversación actual (cambio de página/contexto) ──
+export function clearConversation() {
+  sessionStorage.removeItem(CONV_KEY);
 }
 
 // ── Actualizar nombre del jugador (desde wizard) ──

@@ -30,6 +30,25 @@
 
 .hud-btn:active { background: rgba(74,38,18,1); }
 
+/* En explorar: por debajo de filter panels (z 300), top igual que book */
+#passport-btn, #stats-btn {
+  top: auto; bottom: auto; z-index: 200;
+}
+#passport-btn { top: 16px; }
+#stats-btn    { top: 70px; }
+
+/* Desktop: mover a la izquierda del sidebar */
+@media (min-width: 768px) {
+  #passport-btn, #stats-btn {
+    right: calc(56px + 10px);
+    transition: right 0.2s ease;
+  }
+  body.sidebar-expanded #passport-btn,
+  body.sidebar-expanded #stats-btn {
+    right: calc(190px + 10px);
+  }
+}
+
 .hud-municipio-name {
   font-family: Georgia, serif;
   font-size: 1rem; font-weight: 700;
@@ -150,7 +169,7 @@
   .cat-bar-icon { font-size: 1.5rem; }
 }
 
-/* Panel filtro por subcategoría (restaurantes / ocio / tiendas) */
+/* Panel filtro por subcategoría (comer / ocio / tiendas) */
 #cat-filter-panel {
   position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%);
   width: min(360px, 94vw); z-index: 300;
@@ -331,7 +350,7 @@
 
 /* ── Botón Cargar Más ── */
 #load-more-btn {
-  position: absolute; bottom: 72px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: 72px; right: 16px;
   z-index: 110;
   background: #c8a060; color: #1a0f00;
   border: 2px solid #8b6914; border-radius: 20px;
@@ -343,25 +362,52 @@
 }
 #load-more-btn:active { background: #a88040; }
 
+/* ── Botón filtro en bottom bar (compacto, fijo a la derecha) ── */
+#cat-filter-bar-btn {
+  flex: 0 0 52px;
+  min-width: 52px;
+  border-left: 1px solid rgba(245,234,208,0.18);
+}
+
+/* ── Wrapper scrollable de botones de categoría en barra inferior ── */
+.cat-bar-scroll {
+  flex: 1;
+  display: flex; align-items: stretch;
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+.cat-bar-scroll::-webkit-scrollbar { display: none; }
+
 /* ── Sidebar categorías (desktop ≥ 768px) ── */
 #cat-sidebar { display: none; }
 
 @media (min-width: 768px) {
   #cat-bottom-bar { display: none; }
 
+  /* Botón filtro dentro de la barra — no se usa en desktop (barra oculta) */
+  #cat-filter-bar-btn { display: none; }
+
+  /* Paneles de filtro: visibles cuando panel-open */
+  #cat-filter-panel.panel-open, #mercado-filter-panel.panel-open { display: flex; }
+
   /* Ajustar botón "Cargar más" para sidebar */
-  #load-more-btn { bottom: 24px; right: 68px; left: unset; transform: none; }
+  #load-more-btn { bottom: 24px; right: 68px; }
 
   /* Ajustar botones de filtro para que no queden detrás del sidebar */
   #cat-sidebar {
     display: flex; flex-direction: column; align-items: stretch;
-    position: fixed; top: 0; right: 0; height: 100vh;
+    position: fixed; top: 0; bottom: 0; right: 0;
     width: 56px;
     background: rgba(74,38,18,0.92);
     border-left: 1px solid rgba(245,234,208,0.2);
     transition: width 0.2s ease;
-    z-index: 100; overflow: hidden;
+    z-index: 100; overflow-y: scroll; overflow-x: hidden;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain; touch-action: pan-y;
   }
+  #cat-sidebar::-webkit-scrollbar { display: none; }
   #cat-sidebar.expanded { width: 190px; }
 
   .cat-sb-toggle {
@@ -397,6 +443,7 @@
 
   /* Filtro panel → izquierda del sidebar en desktop */
   #cat-filter-panel, #mercado-filter-panel {
+    position: fixed;
     bottom: unset; left: unset; transform: none;
     top: 0; right: 56px;
     height: 100vh; width: 280px;
@@ -405,10 +452,13 @@
     border-left: 1px solid rgba(139,105,20,0.4);
     overflow-y: auto;
   }
-  #app-explorar.sidebar-expanded #cat-filter-panel,
-  #app-explorar.sidebar-expanded #mercado-filter-panel {
+  body.sidebar-expanded #cat-filter-panel,
+  body.sidebar-expanded #mercado-filter-panel {
     right: 190px;
   }
+
+  /* Load-more: desplazar cuando sidebar expandido */
+  body.sidebar-expanded #load-more-btn { right: 206px; }
 
   /* POI sidebar — más ancho en desktop */
   #poi-sidebar { width: 320px; }
@@ -587,4 +637,79 @@
     height: calc(100dvh - 84px - 80px);
     width: 320px;
   }
+}
+
+/* ── Mobile: botones de categoría a tamaño fijo para scroll horizontal ── */
+@media (max-width: 767px) {
+  .cat-bar-btn { flex: 0 0 52px; min-width: 52px; }
+}
+
+/* ── Mobile: paneles de filtro como bottom sheet ── */
+@media (max-width: 767px) {
+  #cat-filter-panel, #mercado-filter-panel {
+    display: flex !important;   /* override inline display:none del JS */
+    position: fixed;
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px)); /* encima de la barra */
+    left: 0; right: 0;
+    width: 100%; max-width: 100%;
+    max-height: 70vh;
+    overflow-y: auto;
+    flex-direction: column;
+    gap: 12px;
+    border-radius: 16px 16px 0 0;
+    border: none;
+    border-top: 2px solid rgba(139,105,20,0.4);
+    padding: 0 16px 20px;
+    transform: translateY(calc(100% + 60px)); /* fuera de pantalla abajo */
+    transition: transform 0.32s cubic-bezier(0.34, 1, 0.64, 1);
+    z-index: 9100;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.55);
+  }
+
+  /* Handle pill */
+  #cat-filter-panel::before, #mercado-filter-panel::before {
+    content: '';
+    display: block;
+    width: 36px; height: 4px;
+    background: rgba(139,105,20,0.35);
+    border-radius: 2px;
+    margin: 10px auto 2px;
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  /* Abrir: slide-up */
+  #cat-filter-panel.panel-open, #mercado-filter-panel.panel-open {
+    transform: translateY(0);
+  }
+
+  /* Ocultar load-more mientras el sheet está abierto */
+  #app-explorar.filter-open #load-more-btn { display: none; }
+}
+
+/* ── Perfil de elevación ─────────────────────── */
+#rds-elevation-profile {
+  margin: 8px 0 4px;
+  border-top: 1px solid rgba(200,160,80,0.15);
+  padding-top: 8px;
+}
+#rds-elevation-svg {
+  display: block;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.2);
+}
+
+/* ── Día/Noche HUD tints ─────────────────────── */
+#app-explorar[data-daynight="noche"] .hud-municipio-name,
+#app-explorar[data-daynight="madrugada"] .hud-municipio-name {
+  background: rgba(10,20,40,0.90);
+  color: #a0b8d0;
+}
+#app-explorar[data-daynight="atardecer"] .hud-municipio-name {
+  background: rgba(80,30,10,0.90);
+  color: #ffd0a0;
+}
+#app-explorar[data-daynight="amanecer"] .hud-municipio-name {
+  background: rgba(80,40,10,0.90);
+  color: #ffd0a0;
 }

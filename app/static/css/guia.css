@@ -66,6 +66,7 @@
   color: #1a1a1a;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* Flecha apuntando al personaje (a la izquierda del diálogo) */
@@ -441,6 +442,15 @@
 #guia-overlay.guia-char-only #guia-character { cursor: pointer; }
 
 /* ══════════════════════════════════════════════════
+   EXPLORAR.HTML — Monigote anclado esquina inferior izquierda
+   ══════════════════════════════════════════════════ */
+
+#guia-overlay.guia-explorar {
+  right: unset;
+  left: 20px;
+}
+
+/* ══════════════════════════════════════════════════
    BOOK.HTML — Monigote anclado esquina inferior derecha
    ══════════════════════════════════════════════════ */
 
@@ -454,27 +464,26 @@
   cursor: pointer;
 }
 
-/* Dialog: tamaño fijo desde el primer click (no crece con el contenido) */
+/* Dialog: tamaño controlado por media queries (ver abajo) */
 #guia-overlay.guia-book #guia-dialog {
-  width: 320px;
-  height: 500px;
-  min-width: 320px;
-  max-width: 320px;
   font-size: 14px;
   transition: width 0.35s ease, height 0.35s ease;
 }
 /* Chat panel toma el espacio restante del dialog */
-#guia-overlay.guia-book.guia-chat-active #guia-chat-panel {
+#guia-overlay.guia-book.guia-chat-active #guia-chat-panel,
+#guia-overlay.guia-explorar.guia-chat-active #guia-chat-panel {
   flex: 1;
   min-height: 0;
 }
-#guia-overlay.guia-book #guia-chat-history {
+#guia-overlay.guia-book #guia-chat-history,
+#guia-overlay.guia-explorar #guia-chat-history {
   flex: 1;
   min-height: 0;
   max-height: unset;
 }
 /* Input pinado al fondo del panel */
-#guia-overlay.guia-book #guia-chat-input-row {
+#guia-overlay.guia-book #guia-chat-input-row,
+#guia-overlay.guia-explorar #guia-chat-input-row {
   flex-shrink: 0;
 }
 #guia-overlay.guia-book .gchat-msg {
@@ -484,10 +493,8 @@
 
 /* ── Book expanded: crece desde la esquina inferior derecha hacia arriba-izquierda ── */
 /* El overlay permanece en bottom:20px/right:20px — el dialog crece */
+/* Tamaños de expanded controlados por media queries (ver abajo) */
 #guia-overlay.guia-book.chat-expanded #guia-dialog {
-  width: 70vw;
-  height: 70vh;
-  max-width: 70vw;
   font-size: 15px;
 }
 #guia-overlay.guia-book.chat-expanded .gchat-msg {
@@ -505,31 +512,134 @@
   font-size: 18px;
 }
 
-/* ── Responsive: mobile ── */
-@media (max-width: 480px) {
+/* ── Responsive: mobile (≤767px) ── */
+@media (max-width: 767px) {
   #guia-overlay {
-    bottom: 80px;  /* sobre la bottom bar */
-    right: 12px;
+    bottom: 80px;   /* sobre la bottom bar */
+    right: 10px;
   }
+
+  /* Dialog: 80vw × 80vh fijo, sin expandir */
   #guia-dialog {
-    max-width: 240px;
+    width: 80vw;
+    max-width: 80vw;
+    min-width: unset;
+    height: 80vh;
+    max-height: 80vh;
     font-size: 12px;
-    padding: 10px 12px;
+    padding: 38px 12px 10px; /* top 38px reserva espacio para la X */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
+
+  /* Override para .guia-book */
+  #guia-overlay.guia-book #guia-dialog {
+    width: 80vw;
+    max-width: 80vw;
+    min-width: unset;
+    height: 80vh;
+  }
+
+  /* Explorar: izquierda, limitar ancho del dialog para no desbordar */
+  #guia-overlay.guia-explorar {
+    right: unset;
+    left: 10px;
+    bottom: 80px;
+  }
+  #guia-overlay.guia-explorar #guia-dialog {
+    width: calc(100vw - 100px);
+    max-width: calc(100vw - 100px);
+  }
+
+  /* En móvil NO se puede expandir */
+  #guia-dialog-expand { display: none; }
+
+  /* Personaje pequeño */
   #guia-character {
     width: 58px;
     height: 76px;
   }
 
-  /* Reducir historial para que quepan los botones del wizard */
-  #guia-chat-history { max-height: 100px; }
+  /* Botones de recomendación: 50% del ancho del dialog */
+  #guia-choices {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .guia-btn {
+    width: calc(50% - 3px);   /* -3px por el gap de 6px entre botones */
+  }
 
-  /*Modo movil para expandir */
+  /* Chat history ocupa espacio flexible dentro del dialog */
+  .guia-chat-active #guia-chat-history {
+    flex: 1;
+    min-height: 0;
+    max-height: unset;
+  }
+
+  /* En móvil, el expanded NO cambia nada (ya está al máximo) */
   #guia-overlay.chat-expanded #guia-dialog {
-    max-width: calc(100vw - 24px);
-    min-width: 260px;
+    max-width: 80vw;
+    min-width: unset;
+    height: 80vh;
   }
   #guia-overlay.chat-expanded #guia-chat-history {
-    max-height: 360px;
+    max-height: unset;
+  }
+}
+
+/* ── Responsive: tablet/desktop (≥768px) ── */
+@media (min-width: 768px) {
+  /* Explorar: izquierda */
+  #guia-overlay.guia-explorar {
+    right: unset;
+    left: 20px;
+  }
+
+  /* Normal: 40vw × 40vh */
+  #guia-dialog {
+    width: 40vw;
+    max-width: 40vw;
+    height: 40vh;
+    overflow: hidden;
+  }
+
+  /* Override .guia-book */
+  #guia-overlay.guia-book #guia-dialog {
+    width: 40vw;
+    max-width: 40vw;
+    min-width: unset;
+    height: 40vh;
+  }
+
+  /* Botones normal: 90% del ancho del dialog */
+  .guia-btn { width: 90%; }
+
+  /* Chat history ocupa espacio flexible */
+  .guia-chat-active #guia-chat-history {
+    flex: 1;
+    min-height: 0;
+    max-height: unset;
+  }
+
+  /* Expandido: 80vw × 80vh */
+  #guia-overlay.chat-expanded #guia-dialog,
+  #guia-overlay.guia-book.chat-expanded #guia-dialog {
+    width: 80vw;
+    max-width: 80vw;
+    height: 80vh;
+  }
+
+  /* Botones expandido: 50% del ancho */
+  #guia-overlay.chat-expanded #guia-choices {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  #guia-overlay.chat-expanded .guia-btn {
+    width: calc(50% - 3px);
+  }
+
+  #guia-overlay.chat-expanded #guia-chat-history {
+    max-height: unset;
   }
 }

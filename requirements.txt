@@ -32,3 +32,6 @@ python-dotenv>=1.0.1
 
 # HTTP client
 httpx>=0.28.0
+
+# OpenAI (AstuGuía agent)
+openai>=1.30.0

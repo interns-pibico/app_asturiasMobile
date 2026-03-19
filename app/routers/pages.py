@@ -94,5 +94,7 @@ async def explorar_view(
             # AstuGuía context injection
             "municipio_id": municipio["id"],
             "municipio_nombre": municipio["nombre"],
+            "centroid_lat": municipio.get("centroid_lat"),
+            "centroid_lon": municipio.get("centroid_lon"),
         },
     )

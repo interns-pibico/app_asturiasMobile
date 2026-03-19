@@ -39,18 +39,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "console"
 
-    # Widget chat (pibiCo AIDA)
-    chat_api_key: str = ""
-    chat_base_url: str = "https://api.pibico.es/chat"
-    chat_notebook_id: str = ""
-    chat_bottom: int = 15
-    chat_right: int = 65
-    chat_provider: str = "ollama"
-    chat_model: str = "mistral-small:24b"
-    chat_allow_upload: bool = False
-    chat_greeting: str = "¡Hola! Soy AstuGuía, tu guía de Asturias. ¿En qué puedo ayudarte?"
-    chat_system_prompt: str = "Eres AstuGuía, guía turístico de Asturias. Responde en español. Sé amigable, entusiasta y conciso (máximo 3-4 frases). Nunca inventes nombres de rutas, restaurantes ni monumentos."
-    chat_questions: str = '[{"label":"¿Qué ver en Asturias?","message":"¿Qué ver en Asturias?"},{"label":"Gastronomía asturiana","message":"¿Qué platos típicos tiene Asturias?"},{"label":"Rutas de senderismo","message":"¿Qué rutas de senderismo recomiendas en Asturias?"}]'
+    # OpenAI agent (AstuGuía)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
 
     @property
     def is_production(self) -> bool:

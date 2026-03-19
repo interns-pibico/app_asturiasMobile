@@ -15,7 +15,9 @@
      data-municipio-nombre="{{ municipio.nombre }}"
      data-cat="{{ cat }}"
      data-costero="{{ 'true' if es_costero else 'false' }}"
-     data-geojson="{{ geojson_str }}">
+     data-geojson="{{ geojson_str }}"
+     data-lat="{{ centroid_lat or '' }}"
+     data-lon="{{ centroid_lon or '' }}">
 
     <canvas id="explorar-canvas"></canvas>
 
@@ -25,6 +27,7 @@
         </button>
         <div class="hud-municipio-name">{{ municipio.nombre }}</div>
         <div class="hud-cat-label">{{ categoria_label }}</div>
+        <div id="weather-explorar" class="weather-widget"></div>
     </header>
 
     <button id="load-more-btn" style="display:none">Cargar m&#225;s</button>
@@ -37,37 +40,6 @@
             </div>
             <div class="loading-text">Explorando {{ municipio.nombre }}...</div>
         </div>
-    </div>
-
-    <!-- Filter panel restaurantes/ocio/tiendas — siempre en DOM, tags rellenos por JS -->
-    <div id="cat-filter-panel">
-      <div class="cfp-header">
-        <span id="cfp-title">Filtrar</span>
-        <button id="cfp-close">&#x2715;</button>
-      </div>
-      <input id="cfp-search" type="text" placeholder="Buscar por nombre..." autocomplete="off">
-      <div class="cfp-tags" id="cfp-tags">
-        <button class="cfp-tag active" data-tipo="">Todos</button>
-      </div>
-      <button id="cfp-apply">Aplicar filtro</button>
-    </div>
-
-    <!-- Panel filtro Mercado — siempre en DOM -->
-    <div id="mercado-filter-panel">
-        <div class="mfp-header">
-            <span>Filtrar comercios</span>
-            <button id="mfp-close">&#x2715;</button>
-        </div>
-        <input id="mfp-search" type="text" placeholder="Buscar por nombre..." autocomplete="off">
-        <div class="mfp-tags">
-            <button class="mfp-tag" data-q="">Todos</button>
-            <button class="mfp-tag" data-q="sidra">Sidra</button>
-            <button class="mfp-tag" data-q="queso">Quesos</button>
-            <button class="mfp-tag" data-q="embutido">Embutidos</button>
-            <button class="mfp-tag" data-q="artesania">Artesan&#237;a</button>
-            <button class="mfp-tag" data-q="vino">Vinos</button>
-        </div>
-        <button id="mfp-apply">Aplicar filtro</button>
     </div>
 
     <!-- Sidebar izquierdo de detalle de ruta -->
@@ -96,6 +68,10 @@
         </ul>
         <p id="rds-descripcion" class="rds-desc"></p>
         <a id="rds-website" class="rds-link" target="_blank" rel="noopener">M&#225;s informaci&#243;n &#x2192;</a>
+        <div id="rds-elevation-profile" style="display:none">
+          <div class="rds-desnivel-label">Perfil de elevaci&#243;n</div>
+          <svg id="rds-elevation-svg" viewBox="0 0 200 60" preserveAspectRatio="none" width="100%" height="56"></svg>
+        </div>
       </div>
       <div id="route-minimap"></div>
     </aside>
@@ -117,48 +93,54 @@
     </aside>
 
     <nav id="cat-bottom-bar">
-        <button class="cat-bar-btn {% if cat=='ciclismo' %}active{% endif %}" data-cat="ciclismo">
-            <span class="cat-bar-icon">&#x1F6B4;</span>
-            <span class="cat-bar-label">Bici</span>
-        </button>
-        <button class="cat-bar-btn {% if cat=='senderismo' %}active{% endif %}" data-cat="senderismo">
-            <span class="cat-bar-icon">&#x1F97E;</span>
-            <span class="cat-bar-label">Senderismo</span>
-        </button>
-        <button class="cat-bar-btn {% if cat=='sendas_verdes' %}active{% endif %}" data-cat="sendas_verdes">
-            <span class="cat-bar-icon">&#x1F333;</span>
-            <span class="cat-bar-label">Sendas</span>
-        </button>
-        <button class="cat-bar-btn {% if cat=='carril_bici' %}active{% endif %}" data-cat="carril_bici">
-            <span class="cat-bar-icon">&#x1F6B2;</span>
-            <span class="cat-bar-label">Carril Bici</span>
-        </button>
-        <button class="cat-bar-btn {% if cat=='paseos' %}active{% endif %}" data-cat="paseos">
-            <span class="cat-bar-icon">&#x1F6B6;</span>
-            <span class="cat-bar-label">Paseos</span>
-        </button>
-        <button class="cat-bar-btn {% if cat=='comer' %}active{% endif %}" data-cat="comer">
-            <span class="cat-bar-icon">&#x1F37D;&#xFE0F;</span>
-            <span class="cat-bar-label">Comer</span>
-        </button>
-        <button class="cat-bar-btn {% if cat=='ocio' %}active{% endif %}" data-cat="ocio">
-            <span class="cat-bar-icon">&#x1F3AD;</span>
-            <span class="cat-bar-label">Ocio</span>
-        </button>
-        <button class="cat-bar-btn {% if cat=='tiendas' %}active{% endif %}" data-cat="tiendas">
-            <span class="cat-bar-icon">&#x1F6D2;</span>
-            <span class="cat-bar-label">Tiendas</span>
-        </button>
-        <button class="cat-bar-btn {% if cat=='mercado' %}active{% endif %}" data-cat="mercado">
-            <span class="cat-bar-icon">&#x1F3EA;</span>
-            <span class="cat-bar-label">Mercado</span>
+        <div class="cat-bar-scroll">
+            <button class="cat-bar-btn {% if cat=='ciclismo' %}active{% endif %}" data-cat="ciclismo">
+                <span class="cat-bar-icon">&#x1F6B4;</span>
+                <span class="cat-bar-label">Bici</span>
+            </button>
+            <button class="cat-bar-btn {% if cat=='senderismo' %}active{% endif %}" data-cat="senderismo">
+                <span class="cat-bar-icon">&#x1F97E;</span>
+                <span class="cat-bar-label">Senderismo</span>
+            </button>
+            <button class="cat-bar-btn {% if cat=='sendas_verdes' %}active{% endif %}" data-cat="sendas_verdes">
+                <span class="cat-bar-icon">&#x1F333;</span>
+                <span class="cat-bar-label">Sendas</span>
+            </button>
+            <button class="cat-bar-btn {% if cat=='carril_bici' %}active{% endif %}" data-cat="carril_bici">
+                <span class="cat-bar-icon">&#x1F6B2;</span>
+                <span class="cat-bar-label">Carril Bici</span>
+            </button>
+            <button class="cat-bar-btn {% if cat=='paseos' %}active{% endif %}" data-cat="paseos">
+                <span class="cat-bar-icon">&#x1F6B6;</span>
+                <span class="cat-bar-label">Paseos</span>
+            </button>
+            <button class="cat-bar-btn {% if cat=='comer' %}active{% endif %}" data-cat="comer">
+                <span class="cat-bar-icon">&#x1F37D;&#xFE0F;</span>
+                <span class="cat-bar-label">Comer</span>
+            </button>
+            <button class="cat-bar-btn {% if cat=='ocio' %}active{% endif %}" data-cat="ocio">
+                <span class="cat-bar-icon">&#x1F3AD;</span>
+                <span class="cat-bar-label">Ocio</span>
+            </button>
+            <button class="cat-bar-btn {% if cat=='tiendas' %}active{% endif %}" data-cat="tiendas">
+                <span class="cat-bar-icon">&#x1F6D2;</span>
+                <span class="cat-bar-label">Tiendas</span>
+            </button>
+            <button class="cat-bar-btn {% if cat=='mercado' %}active{% endif %}" data-cat="mercado">
+                <span class="cat-bar-icon">&#x1F3EA;</span>
+                <span class="cat-bar-label">Mercado</span>
+            </button>
+        </div>
+        <button id="cat-filter-bar-btn" class="cat-bar-btn" style="display:none">
+            <span class="cat-bar-icon">&#x2699;&#xFE0F;</span>
+            <span class="cat-bar-label">Filtros</span>
         </button>
     </nav>
 
     <div id="poi-tooltip"></div>
 
     <!-- AstuGuía Comentarista -->
-    <div id="guia-overlay" class="guia-char-only" hidden>
+    <div id="guia-overlay" class="guia-char-only guia-explorar" hidden>
       <div id="guia-wrap">
         <div id="guia-character"></div>
         <div id="guia-dialog">
@@ -222,6 +204,35 @@
         </button>
     </nav>
 </div>
+
+<!-- Paneles de filtro fuera de #app-explorar para evitar clipping por overflow:hidden -->
+<div id="cat-filter-panel">
+  <div class="cfp-header">
+    <span id="cfp-title">Filtrar</span>
+    <button id="cfp-close">&#x2715;</button>
+  </div>
+  <input id="cfp-search" type="text" placeholder="Buscar por nombre..." autocomplete="off">
+  <div class="cfp-tags" id="cfp-tags">
+    <button class="cfp-tag active" data-tipo="">Todos</button>
+  </div>
+  <button id="cfp-apply">Aplicar filtro</button>
+</div>
+
+<div id="mercado-filter-panel">
+    <div class="mfp-header">
+        <span>Filtrar comercios</span>
+        <button id="mfp-close">&#x2715;</button>
+    </div>
+    <div class="mfp-tags">
+        <button class="mfp-tag active" data-cat="">&#x1F6D2; Todos</button>
+        <button class="mfp-tag" data-cat="gastro">&#x1F9C0; Gastro</button>
+        <button class="mfp-tag" data-cat="sidra-bebidas">&#x1F37E; Sidra</button>
+        <button class="mfp-tag" data-cat="artesania">&#x1FA86; Artesan&#237;a</button>
+        <button class="mfp-tag" data-cat="dulce">&#x1F370; Dulce</button>
+        <button class="mfp-tag" data-cat="huerta-campo">&#x1F33F; Huerta</button>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -233,6 +244,11 @@
   }
 }
 </script>
-<script type="module" src="{{ url_for('static', path='js/explorar.js') }}?v=comer1"></script>
-<script type="module" src="{{ url_for('static', path='js/guia-explorar.js') }}?v=local2"></script>
+<script type="module" src="{{ url_for('static', path='js/explorar.js') }}?v=daynight1"></script>
+<script type="module" src="{{ url_for('static', path='js/guia-explorar.js') }}?v=local5"></script>
+<script type="module">
+  import { initWeather } from '{{ url_for("static", path="js/weather.js") }}?v=wx2';
+  const el = document.getElementById('app-explorar');
+  initWeather(el.dataset.lat, el.dataset.lon, document.getElementById('weather-explorar'));
+</script>
 {% endblock %}

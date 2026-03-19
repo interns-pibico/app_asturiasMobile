@@ -32,7 +32,61 @@
 <body>
     {% block body %}{% endblock %}
 
+    <!-- Pasaporte global -->
+    <button id="passport-btn" data-passport="open" title="Mi Pasaporte Asturiano" aria-label="Abrir pasaporte">🎫</button>
+
+    <div id="passport-panel" role="dialog" aria-modal="true" aria-label="Pasaporte Asturiano">
+      <!-- Cubierta -->
+      <div id="passport-cover">
+        <div class="ppc-left">
+          <span class="ppc-emblem">🗺️</span>
+          <div>
+            <div class="ppc-title">PASAPORTE ASTURIANO</div>
+            <div class="ppc-sub">Explorador de Concejos</div>
+          </div>
+        </div>
+        <div id="passport-actions">
+          <button id="passport-download" title="Descargar PDF">⬇️ PDF</button>
+          <button id="passport-close" title="Cerrar">✕</button>
+        </div>
+      </div>
+      <!-- Spread dos páginas -->
+      <div id="passport-spread">
+        <div class="pp-page pp-page-left">
+          <div class="pp-page-header">🏆 Trofeos <span id="trophies-counter">0/10</span></div>
+          <div id="trophies-grid"></div>
+        </div>
+        <div class="pp-spine"></div>
+        <div class="pp-page pp-page-right">
+          <div class="pp-page-header">⭐ Sellos <span id="passport-counter">0/78</span></div>
+          <div id="passport-grid"></div>
+        </div>
+      </div>
+    </div>
+    <div id="passport-backdrop"></div>
+    <!-- FUERA del panel — fix PDF blanco -->
+    <div id="passport-print-area"></div>
+
+    <!-- Estadísticas global -->
+    <button id="stats-btn" data-stats="open" title="Mis Estadísticas" aria-label="Abrir estadísticas">📊</button>
+
+    <div id="stats-panel" role="dialog" aria-modal="true" aria-label="Estadísticas">
+      <div id="stats-header">
+        <span>📊 Mis Estadísticas</span>
+        <button id="stats-close" title="Cerrar">✕</button>
+      </div>
+      <div id="stats-content"></div>
+    </div>
+    <div id="stats-backdrop"></div>
+
     {% block scripts %}{% endblock %}
+
+    <script type="module">
+      import { initPassport } from '{{ url_for("static", path="js/passport.js") }}';
+      import { initStats }    from '{{ url_for("static", path="js/stats.js") }}';
+      initPassport();
+      initStats();
+    </script>
 
     <script>
     window.ASTUGUIA_CONTEXT = {
