@@ -1,47 +1,62 @@
-# AstuGuía — Concejos Principales
+# AstuGuía — Referencia de IDs de Municipios
 
-## Gijón (id=24) — Costa
-- Población: ~270.000 hab. (ciudad más grande de Asturias)
-- Tipo: Costa, ciudad industrial y cultural
-- Rutas disponibles: 114 ciclismo, 74 paseos, senderismo periurbano
-- Destacado: Playa de San Lorenzo (1.8km), Parque Isabel la Católica, Museo del Ferrocarril
-- Mercado: Mercado del Fontán (productos locales)
-- Gastronomía: sidrerías en zona Cimadevilla, marisquerías en el puerto
-- Ideal para: ciclismo urbano, paseos costeros, gastronomía, familias
+Usa estos IDs cuando llames a las tools `buscar_pois`, `buscar_rutas` o `buscar_municipios`.
 
-## Oviedo (id=43) — Interior (Capital)
-- Población: ~220.000 hab. (capital de Asturias)
-- Tipo: Interior, capital administrativa y cultural
-- Destacado: Casco histórico medieval, Catedral, Campo San Francisco, museos
-- Ideal para: cultura, museos, gastronomía urbana, senderismo cercano (Monte Naranco)
-- Patrimonio: Monuments prerrománicos (UNESCO)
+## Municipios con doc propio (info detallada disponible)
 
-## Llanes (id=35) — Costa
-- Tipo: Costa, pueblo con encanto
-- Destacado: Senderismo costero (Ruta del Alba), playas vírgenes, bufones, casonas indianas
-- Ideal para: senderismo costero, playas, turismo rural, fotografía
+| id | Nombre | Zona |
+|----|--------|------|
+| 4 | Avilés | Costa |
+| 8 | Cabrales | Interior montaña |
+| 12 | Cangas del Narcea | Interior profundo |
+| 24 | Gijón | Costa |
+| 35 | Llanes | Costa |
+| 43 | Oviedo | Interior (capital) |
+| 49 | Ponga | Interior montaña |
+| 55 | Ribadesella | Costa |
+| 67 | Somiedo | Interior montaña |
+| 76 | Villaviciosa | Costa |
 
-## Ribadesella (id=55) — Costa
-- Tipo: Costa, cerca de Picos de Europa
-- Destacado: Cueva Tito Bustillo (arte rupestre), descenso del Sella (piragüismo), playas
-- Ideal para: senderismo de montaña, piragüismo, cultura prehistórica
+## Todos los municipios (referencia completa)
 
-## Cangas del Narcea (id=12) — Interior profundo
-- Tipo: Interior, montaña
-- Destacado: Reserva de la Biosfera de Muniellos (hayedo), Vino de Cangas (DO), senderismo de montaña
-- Ideal para: senderismo difícil, naturaleza salvaje, enoturismo, desconexión
-
-## Avilés (id=4) — Costa
-- Tipo: Costa, ciudad industrial reconvertida
-- Destacado: Centro Niemeyer (arquitectura), casco histórico medieval, ría de Avilés
-- Ideal para: cultura, arquitectura, ciclismo por la ría, gastronomía
-
-## Somiedo (id=65) — Interior montaña
-- Tipo: Interior, Parque Natural
-- Destacado: Lago de Somiedo, cabañas de teitos (pallozas), oso pardo
-- Ideal para: senderismo difícil, naturaleza, fauna, turismo rural tradicional
-
-## Ponga (id=49) — Interior montaña
-- Tipo: Interior, municipio con menor densidad de España
-- Destacado: Oso pardo, quebrantahuesos, senderismo de alta montaña
-- Ideal para: senderismo exigente, naturaleza, silencio total
+| id | Nombre | id | Nombre |
+|----|--------|----|--------|
+| 1 | Allande | 2 | Aller |
+| 3 | Amieva | 4 | Avilés |
+| 5 | Belmonte de Miranda | 6 | Bimenes |
+| 7 | Boal | 8 | Cabrales |
+| 9 | Cabranes | 10 | Candamo |
+| 11 | Cangas de Onís | 12 | Cangas del Narcea |
+| 13 | Caravia | 14 | Carreño |
+| 15 | Caso | 16 | Castrillón |
+| 17 | Castropol | 18 | Coaña |
+| 19 | Colunga | 20 | Corvera de Asturias |
+| 21 | Cudillero | 22 | Degaña |
+| 23 | El Franco | 24 | Gijón |
+| 25 | Gozón | 26 | Grado |
+| 27 | Grandas de Salime | 28 | Ibias |
+| 29 | Illano | 30 | Illas |
+| 31 | Langreo | 32 | Laviana |
+| 33 | Lena | 34 | Llanera |
+| 35 | Llanes | 36 | Mieres |
+| 37 | Morcín | 38 | Muros de Nalón |
+| 39 | Nava | 40 | Navia |
+| 41 | Noreña | 42 | Onís |
+| 43 | Oviedo | 44 | Parres |
+| 45 | Peñamellera Alta | 46 | Peñamellera Baja |
+| 47 | Pesoz | 48 | Piloña |
+| 49 | Ponga | 50 | Pravia |
+| 51 | Proaza | 52 | Quirós |
+| 53 | Las Regueras | 54 | Ribadedeva |
+| 55 | Ribadesella | 56 | Ribera de Arriba |
+| 57 | Riosa | 58 | Salas |
+| 59 | San Martín de Oscos | 60 | San Martín del Rey Aurelio |
+| 61 | San Tirso de Abres | 62 | Santa Eulalia de Oscos |
+| 63 | Santo Adriano | 64 | Sariego |
+| 65 | Siero | 66 | Sobrescobio |
+| 67 | Somiedo | 68 | Soto del Barco |
+| 69 | Tapia de Casariego | 70 | Taramundi |
+| 71 | Teverga | 72 | Tineo |
+| 73 | Valdés | 74 | Vegadeo |
+| 75 | Villanueva de Oscos | 76 | Villaviciosa |
+| 77 | Villayón | 78 | Yernes y Tameza |

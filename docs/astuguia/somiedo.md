@@ -1,4 +1,4 @@
-# Somiedo (id=65) — Parque Natural y Reserva de la Biosfera
+# Somiedo (id=67) — Parque Natural y Reserva de la Biosfera
 
 ## Descripción General
 

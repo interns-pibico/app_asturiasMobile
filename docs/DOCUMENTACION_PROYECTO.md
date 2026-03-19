@@ -1,7 +1,7 @@
 # Documentación Técnica — app_asturiasMobile
 
-> **Versión:** 1.2 · **Fecha:** 2026-03-12 · **Rol:** Senior Technical Writer / Arquitecto de Software
-> **Formato:** Optimizado para Notion / exportable a Word
+> **Versión:** 1.5 · **Fecha:** 2026-03-19 · **Rol:** Senior Technical Writer / Arquitecto de Software
+> **Formato:** Optimizado para presentación / exportable a Notion o Word
 
 ---
 
@@ -9,11 +9,13 @@
 
 1. [Información General y Contexto](#1-información-general-y-contexto)
 2. [Arquitectura y Flujo del Sistema](#2-arquitectura-y-flujo-del-sistema)
-3. [Obtención y Gestión de Datos](#3-obtención-y-gestión-de-datos)
-4. [Guía de Estilo y Diseño UI/UX](#4-guía-de-estilo-y-diseño-uiux)
-5. [Documentación de la API](#5-documentación-de-la-api)
-6. [Configuración y Despliegue](#6-configuración-y-despliegue)
-7. [Mantenimiento y Escalabilidad](#7-mantenimiento-y-escalabilidad)
+3. [AstuGuía — IA Conversacional](#3-astuguía--ia-conversacional)
+4. [Gamificación — Pasaporte, Trofeos y Estadísticas](#4-gamificación--pasaporte-trofeos-y-estadísticas)
+5. [Obtención y Gestión de Datos](#5-obtención-y-gestión-de-datos)
+6. [Guía de Estilo y Diseño UI/UX](#6-guía-de-estilo-y-diseño-uiux)
+7. [Documentación de la API](#7-documentación-de-la-api)
+8. [Configuración y Despliegue](#8-configuración-y-despliegue)
+9. [Mantenimiento y Escalabilidad](#9-mantenimiento-y-escalabilidad)
 
 ---
 
@@ -23,6 +25,8 @@
 
 **app_asturiasMobile** es una aplicación web mobile-first para explorar el mapa de Asturias y sus 78 municipios (concejos). El usuario vive la experiencia como si manejara una guía de viaje mágica: un **libro 3D animado** que se abre para revelar el mapa interactivo de la región. Al tocar un municipio, transiciona a una **escena 3D isométrica** de estética _Paper Mario_ donde puede explorar puntos de interés (restaurantes, ocio, tiendas, mercados) y rutas deportivas (ciclismo, senderismo, sendas verdes, carril bici, paseos), con datos reales extraídos de OpenStreetMap.
 
+La aplicación incluye **AstuGuía**, un personaje interactivo con IA conversacional que responde en tiempo real sobre cualquiera de los 78 concejos usando datos directos de la base de datos combinados con conocimiento cultural. El sistema de **gamificación** premia la exploración con sellos de pasaporte, trofeos desbloqueables y estadísticas de viaje.
+
 ### 1.2 Objetivo y Alcance
 
 | Dimensión | Descripción |
@@ -31,7 +35,7 @@
 | **Usuarios objetivo** | Turistas con smartphone, ciclistas, senderistas, residentes que buscan ocio local |
 | **Alcance geográfico** | 78 municipios de Asturias (Principado de Asturias, España) |
 | **Acceso** | Web app responsive; sin autenticación de usuario final |
-| **Fuentes de datos** | OpenStreetMap (POIs y rutas), Wikidata (descripciones), Open-Elevation (altimetría) |
+| **Fuentes de datos** | OpenStreetMap (POIs y rutas), Wikidata (descripciones), Open-Elevation (altimetría), Open-Meteo (meteorología), api_mercadoAsturias (comercios de mercado) |
 
 ### 1.3 Stack Tecnológico Completo
 
@@ -45,7 +49,9 @@
 | ORM / queries | SQLAlchemy 2.0 async | 2.0+ |
 | Driver PostgreSQL | asyncpg | — |
 | Extensión geo | GeoAlchemy2 | — |
+| HTTP cliente async | httpx | — |
 | Templates | Jinja2 | 3.x |
+| IA chat | OpenAI API (gpt-4o-mini) + pibiCo notebook proxy | — |
 
 #### Base de Datos
 
@@ -65,6 +71,8 @@
 | EffectComposer + OutlinePass | r170 | `static/vendor/three/` |
 | Fuente Inter | WOFF2 | `static/vendor/fonts/` |
 
+> **Sin excepciones de red:** todo tráfico externo pasa por el backend FastAPI. `weather.js` llama a `/api/weather` (mismo origen); el servidor proxia Open-Meteo. Nunca hay llamadas externas desde el navegador.
+
 #### Infraestructura
 
 | Componente | Detalle |
@@ -82,39 +90,42 @@
 ### 2.1 Diagrama de Arquitectura (ASCII)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         CLIENTE (Browser)                        │
-│  book.js + Three.js r170 (libro 3D)                             │
-│  map embebido Leaflet 1.9.4 (página derecha del libro)          │
-│  explorar.js + Three.js r170 (escena isométrica)                │
-└──────────────────────┬──────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         CLIENTE (Browser)                            │
+│  book.js + Three.js r170 (libro 3D)                                 │
+│  explorar.js + Three.js r170 (escena isométrica)                    │
+│  guia-chat.js → POST /api/guia/chat (SSE streaming)                 │
+│  passport.js / trophies.js / stats.js (localStorage)               │
+│  weather.js → GET /api/weather (proxy backend, cache 30min)        │
+└──────────────────────┬──────────────────────────────────────────────┘
                        │ HTTPS  /mobile/
-┌──────────────────────▼──────────────────────────────────────────┐
-│                         NGINX                                     │
-│  /mobile/  → proxy_pass 127.0.0.1:8002                         │
-│  /mobile/static/vendor/ → immutable cache 365d                  │
-│  /mobile/static/css|js/ → no-cache, must-revalidate             │
-└──────────────────────┬──────────────────────────────────────────┘
+┌──────────────────────▼──────────────────────────────────────────────┐
+│                         NGINX                                         │
+│  /mobile/  → proxy_pass 127.0.0.1:8002                             │
+│  proxy_buffering off; proxy_read_timeout 120s (SSE)                 │
+│  /mobile/static/vendor/ → immutable cache 365d                      │
+│  /mobile/static/css|js/ → no-cache, must-revalidate                 │
+└──────────────────────┬──────────────────────────────────────────────┘
                        │
-┌──────────────────────▼──────────────────────────────────────────┐
-│                    SUPERVISOR                                     │
-│  [program:app_asturiasMobile]  autorestart=true                  │
-│  gunicorn app.main:app -w {CPU} -k UvicornWorker                │
-│                  bind 127.0.0.1:8002                             │
-└──────────────────────┬──────────────────────────────────────────┘
+┌──────────────────────▼──────────────────────────────────────────────┐
+│                    SUPERVISOR                                         │
+│  [program:app_asturiasMobile]  autorestart=true                      │
+│  gunicorn app.main:app -w {CPU} -k UvicornWorker                    │
+│                  bind 127.0.0.1:8002                                 │
+└──────────────────────┬──────────────────────────────────────────────┘
                        │
-┌──────────────────────▼──────────────────────────────────────────┐
-│                    FASTAPI APP                                    │
-│  routers/pages.py      → GET /  · GET /explorar/{id}            │
-│  routers/api/          → /api/municipios · /api/pois · ...      │
-│  services/             → queries PostGIS async                   │
-│  models/               → SQLAlchemy ORM (asturiasuser owner)    │
-└──────────────────────┬──────────────────────────────────────────┘
+┌──────────────────────▼──────────────────────────────────────────────┐
+│                    FASTAPI APP                                        │
+│  routers/pages.py      → GET /  · GET /explorar/{id}                │
+│  routers/api/          → /api/municipios · /api/pois · ...          │
+│  routers/api/guia.py   → POST /api/guia/chat  (SSE streaming)       │
+│  services/guia.py      → fast-path + OpenAI + pibiCo proxy          │
+└──────────────────────┬──────────────────────────────────────────────┘
                        │ asyncpg / SQLAlchemy async
-┌──────────────────────▼──────────────────────────────────────────┐
-│              PostgreSQL + PostGIS  (BD: asturiasmap)             │
-│  municipios · puntos_interes · rutas_ciclismo · ...             │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────▼──────────────────────────────────────────────┐
+│              PostgreSQL + PostGIS  (BD: asturiasmap)                 │
+│  municipios · puntos_interes · rutas_ciclismo · ...                 │
+└─────────────────────────────────────────────────────────────────────┘
 
         ┌──────────────────────────────────────┐
         │  SERVICIOS EXTERNOS (ETL / scripts)  │
@@ -129,6 +140,20 @@
         │  /v1/municipios/{slug}/comercios     │
         │  ← proxy desde /api/mercado/{id}    │
         └──────────────────────────────────────┘
+
+        ┌──────────────────────────────────────┐
+        │  pibiCo API (externo)                │
+        │  Notebook: nb_4c0b0100c552           │
+        │  Modelo: gpt-oss:20b (RAG notebooks) │
+        │  ← proxy desde /api/guia/chat        │
+        └──────────────────────────────────────┘
+
+        ┌──────────────────────────────────────┐
+        │  OpenAI API (externo)                │
+        │  Modelo: gpt-4o-mini                 │
+        │  Tool calling (fallback fast-path)   │
+        │  ← directo desde services/guia.py   │
+        └──────────────────────────────────────┘
 ```
 
 ### 2.2 Flujo de Usuario (User Flow)
@@ -140,26 +165,28 @@ Usuario abre /
 [FASE 1] Libro 3D cerrado (Three.js)
         │  tap / click
         ▼
-[FASE 2] Animación apertura del libro (Three.js + tweening manual)
-        │  completada
+[FASE 2] Animación apertura del libro (Three.js + tweening manual ~6.5s)
+        │  completada (o saltada vía sessionStorage.bookReady)
         ▼
 [FASE 3] Libro abierto — Leaflet cargado en página derecha
          Mapa de Asturias con 78 municipios coloreados
-        │  tap municipio → event:book:fase3ready dispatched
+         + AstuGuía wizard: saluda, pregunta nombre, recomienda municipio
+        │  tap municipio → card → enlace explorar
         ▼
 GET /explorar/{municipio_id}?cat=senderismo
         │
         ▼
 [explorar.html] Escena 3D isométrica (Three.js OrthographicCamera)
-  ┌─────────────────────────────────────────────────────┐
-  │  - Platform terrain (ExtrudeGeometry + bevel)       │
-  │  - POI sprites (billboard CanvasTexture + emojis)   │
-  │  - Rutas 3D (TubeGeometry 3 capas glow)             │
-  │  - Bottom bar: 9 categorías                         │
-  │  - Sidebar izquierdo: POI detail / Route detail     │
-  │  - Minimap Leaflet (trazado ruta en color cat.)     │
-  │  - AstuGuía: personaje arrastrable + burbujas       │
-  └─────────────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  - Platform terrain (ExtrudeGeometry + bevel)                   │
+  │  - POI sprites (billboard CanvasTexture + emojis por subtipo)  │
+  │  - Rutas 3D (TubeGeometry 3 capas glow por categoría)          │
+  │  - Bottom bar: 9 categorías (SPA sin reload)                   │
+  │  - Sidebar izquierdo: POI detail / Route detail + minimap       │
+  │  - AstuGuía comentarista con IA (fast-path <100ms si DB)       │
+  │  - Widget meteorológico (Open-Meteo, esquina superior der.)     │
+  │  + stamp pasaporte al entrar al municipio                       │
+  └─────────────────────────────────────────────────────────────────┘
         │  btn-back → sessionStorage.bookReady='1'
         ▼
 GET /  (libro ya abierto, salta animación)
@@ -172,14 +199,17 @@ app_asturiasMobile/
 ├── app/
 │   ├── main.py                      ← create_app() factory, lifespan DB pool
 │   ├── core/
-│   │   └── config.py                ← Settings: DATABASE_URL, PORT=8002, ROOT_PATH
+│   │   └── config.py                ← Settings: DATABASE_URL, PORT=8002, ROOT_PATH, CHAT_*
 │   ├── models/
 │   │   ├── municipio.py             ← Tabla municipios (PostGIS MultiPolygon)
-│   │   └── poi.py                   ← Tabla puntos_interes (Point)
+│   │   ├── poi.py                   ← Tabla puntos_interes (Point)
+│   │   └── ruta.py                  ← 5 clases ORM rutas_* (PostGIS)
 │   ├── services/
 │   │   ├── municipio.py             ← ST_Centroid, ST_AsGeoJSON, ST_Simplify
 │   │   ├── poi.py                   ← ST_Within, paginación, count query
-│   │   └── rutas.py                 ← ST_Intersects por municipio, paginación
+│   │   ├── rutas.py                 ← ST_Intersects por municipio, paginación
+│   │   ├── mercado.py               ← httpx proxy → api_mercadoAsturias:8001
+│   │   └── guia.py                  ← IA: fast-path + tools BD + OpenAI + pibiCo proxy
 │   └── routers/
 │       ├── pages.py                 ← GET /, GET /explorar/{id}
 │       └── api/
@@ -187,36 +217,60 @@ app_asturiasMobile/
 │           ├── pois.py              ← /api/pois/{id}?categoria=X&offset=N
 │           ├── rutas.py             ← /api/rutas/{id}?tipo=X&offset=N
 │           ├── mercado.py           ← proxy → api_mercadoAsturias:8001
+│           ├── guia.py              ← POST /api/guia/chat (SSE StreamingResponse)
+│           ├── weather.py           ← GET /api/weather?lat=X&lon=Y (proxy Open-Meteo)
 │           └── health.py            ← /api/v1/health/live
 ├── static/
 │   ├── css/
-│   │   ├── style.css                ← Variables Paper Mario, reset, botones
+│   │   ├── style.css                ← Variables Paper Mario, reset, pasaporte, trofeos
 │   │   ├── book.css                 ← Libro 3D + transición libro→mapa
 │   │   ├── explorar.css             ← Canvas + bottom bar + sidebars + POI cards
-│   │   └── guia.css                 ← AstuGuía overlay, personaje, burbuja
+│   │   └── guia.css                 ← AstuGuía overlay, personaje, burbuja, chat
 │   ├── js/
 │   │   ├── book.js                  ← Three.js libro 3D + Leaflet integrado
 │   │   ├── explorar.js              ← Three.js escena isométrica (SPA, rutas, clusters)
 │   │   ├── guia-utils.js            ← SVG personaje, typewriter, draggable, loadPos
 │   │   ├── guia-book.js             ← AstuGuía wizard + captura nombre en book.html
 │   │   ├── guia-explorar.js         ← AstuGuía comentarista en explorar.html
-│   │   └── guia-chat.js             ← Chat directo pibiCo SSE + captura nombre + miniMd
+│   │   ├── guia-chat.js             ← Chat SSE + captura nombre + miniMd + NAV detection
+│   │   ├── weather.js               ← Widget meteorológico (proxy /api/weather, ES module)
+│   │   ├── passport.js              ← Pasaporte de sellos + PDF download
+│   │   ├── trophies.js              ← Sistema de trofeos/logros (10 badges)
+│   │   └── stats.js                 ← Panel estadísticas del viajero
 │   └── vendor/
 │       ├── leaflet/                 ← Leaflet 1.9.4 (JS + CSS + imágenes PNG)
 │       ├── three/                   ← Three.js r170 + EffectComposer + OutlinePass
 │       └── fonts/                   ← Inter Regular/Medium/Bold WOFF2
 ├── templates/
-│   ├── base.html                    ← <!DOCTYPE>, meta viewport, ROOT_PATH
+│   ├── base.html                    ← DOCTYPE, viewport, window.ASTUGUIA_CONTEXT, pasaporte HTML
 │   └── pages/
-│       ├── book.html                ← Vista libro (data-root para ROOT_PATH)
-│       └── explorar.html            ← Vista 3D (data-municipio-* attrs)
+│       ├── book.html                ← Vista libro (data-root, weather-book widget)
+│       └── explorar.html            ← Vista 3D (data-municipio-*, weather-explorar widget)
 ├── scripts/
 │   ├── import_rutas_osm.py          ← ETL Overpass API → PostgreSQL
 │   ├── enrich_elevacion.py          ← Open-Elevation → ascenso_m/descenso_m
 │   ├── enrich_wikidata.py           ← Wikidata → wikidata_desc
 │   └── update_rutas_monthly.sh      ← Cron mensual orquestador
 └── docs/
-    └── DOCUMENTACION_PROYECTO.md    ← Este archivo
+    ├── DOCUMENTACION_PROYECTO.md    ← Este archivo
+    ├── astuguia/                    ← Docs para el notebook pibiCo (RAG)
+    │   ├── system.md                ← System prompt maestro (condensado ~1500 tokens)
+    │   ├── asturias_general.md      ← Historia, clima, geografía, UNESCO
+    │   ├── gastronomia.md           ← Fabada, sidra, quesos (contexto cultural)
+    │   ├── senderismo.md            ← Rutas famosas: Cares, Senda del Oso, GR-E1
+    │   ├── ciclismo.md              ← Rutas ciclistas destacadas
+    │   ├── mercados.md              ← Cuándo usar buscar_mercados, 5 categorías, cobertura
+    │   ├── oviedo.md                ← Historia, prerrománico, cultura
+    │   ├── gijon.md                 ← Eventos, museos, contexto urbano
+    │   ├── llanes.md                ← Gulpiyuri, Bufones, Pindal
+    │   ├── ribadesella.md           ← Descenso del Sella, Costa Jurásica
+    │   ├── cangas_del_narcea.md     ← Oso pardo, vino DOP, Muniellos
+    │   ├── aviles.md                ← Costa / ciudad industrial reconvertida
+    │   ├── somiedo.md               ← Interior / Parque Natural
+    │   ├── ponga.md                 ← Interior / alta montaña
+    │   ├── villaviciosa.md          ← Costa / sidra
+    │   └── cabrales.md              ← Interior / Picos de Europa
+    └── sesiones/                    ← Histórico de sesiones de desarrollo
 ```
 
 ### 2.4 Lógica de Negocio — Capas de Servicios
@@ -233,7 +287,7 @@ app_asturiasMobile/
 
 | Función | PostGIS usada | Descripción |
 |---------|--------------|-------------|
-| `get_pois_by_municipio(id, cat, limit, offset)` | `ST_Within(poi.geom, mun.geom)` | POIs paginados dentro del municipio |
+| `get_pois_by_municipio(id, cat, tipo, limit, offset)` | `ST_Within(poi.geom, mun.geom)` | POIs paginados dentro del municipio, filtro server-side por tipo |
 | Retorna | `tuple[list[dict], int]` | Lista de POIs + total count (para `X-Total-Count`) |
 
 #### `services/rutas.py`
@@ -245,13 +299,325 @@ app_asturiasMobile/
 
 ---
 
-## 3. Obtención y Gestión de Datos
+## 3. AstuGuía — IA Conversacional
 
-### 3.1 Modelo de Datos — ERD Completo
+### 3.1 Descripción General
+
+AstuGuía es un personaje interactivo arrastrable presente en ambas vistas. Combina un wizard de recomendación (book.html) con un chat conversacional en tiempo real (explorar.html y book.html). El chat usa un sistema de tres niveles de respuesta ordenados por latencia:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  BD: asturiasmap (PostgreSQL + PostGIS) — acceso READ-ONLY          │
+│  NIVEL 1 — FAST-PATH  (< 100 ms)                                    │
+│  Detección de keyword + municipio → consulta BD directa → respuesta  │
+│  hardcodeada en bable asturiano con datos reales.                    │
+│  Cubre: los 78 municipios × 9 categorías × keywords de búsqueda.    │
+├─────────────────────────────────────────────────────────────────────┤
+│  NIVEL 2 — OPENAI Phase 1+2  (5-15 s)                              │
+│  OpenAI gpt-4o-mini con 5 tools BD (fase 1: selección de tool).     │
+│  Fase 2: streaming de respuesta narrativa sobre los datos obtenidos. │
+│  Cubre: preguntas sobre municipios sin keyword fast-path detectado.  │
+├─────────────────────────────────────────────────────────────────────┤
+│  NIVEL 3 — PIBICO PROXY  (variable)                                 │
+│  Proxy SSE hacia pibiCo notebook nb_4c0b0100c552 (gpt-oss:20b).    │
+│  RAG sobre docs culturales. Cubre: preguntas generales sobre         │
+│  historia, gastronomía, geografía, cultura de Asturias.             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Arquitectura del Bridge `/api/guia/chat`
+
+```
+Frontend JS (guia-chat.js)
+        │
+        │  POST /api/guia/chat  {message, municipio_id, categoria, municipio_nombre, ...}
+        ▼
+routers/api/guia.py
+        │  GuiaChatRequest (Pydantic)
+        │  StreamingResponse (text/event-stream)
+        ▼
+services/guia.py — stream_openai_agent()
+        │
+        ├─ _try_fast_path()  ──────────────────────────────────────────┐
+        │      │                                                        │
+        │      ├─ _detect_municipio_from_text(msg)                     │
+        │      │      → static dict 10 municipios                      │
+        │      │      → _detect_municipio_db(msg) [78 municipios, BD]  │
+        │      │                                                        │
+        │      ├─ _detect_fast_path(msg, cat, mid)                     │
+        │      │      → keyword matching (_FP_COMER, _FP_OCIO, etc.)  │
+        │      │      → catch-all (_FP_CATCH_ALL) si hay categoria     │
+        │      │                                                        │
+        │      └─ _execute_tool(tool_name, params)                     │
+        │             → buscar_pois / buscar_rutas / buscar_mercados   │
+        │             → _build_fast_response() → SSE stream hardcoded  │◄─ NIVEL 1
+        │
+        ├─ OpenAI Phase 1 (tool selection)  ──────────────────────────┐
+        │      gpt-4o-mini, max_completion_tokens=50                   │
+        │      Elige tool y parámetros basándose en el mensaje         │
+        │                                                              │
+        ├─ _execute_tool() → datos BD reales                          │
+        │                                                              │
+        └─ OpenAI Phase 2 (narrative streaming) ─────────────────────►  NIVEL 2
+               gpt-4o-mini, stream=True, con datos BD en prompt
+               yield chunks → SSE data events
+
+        Si ningún fast-path ni municipio detectado:
+        └─ stream_pibico() ──────────────────────────────────────────►  NIVEL 3
+               httpx SSE proxy → pibiCo notebook
+               build_system_prompt(): system.md + docs/*.md + CONTEXTO_ACTUAL BD
+               build_db_context(): counts de POIs/rutas del municipio actual
+```
+
+### 3.3 Fast-Path — Detección y Tools
+
+#### Municipio Detection
+
+1. **Static dict** (`_MUNICIPIO_TEXT_TO_ID`): 10 municipios más comunes → O(1)
+2. **DB cache** (`_detect_municipio_db`): carga los 78 municipios de la BD al primer uso, ordenados por `LENGTH(nombre) DESC` (evita que "Cangas" matchee antes que "Cangas del Narcea"). Normalización: sin acentos, minúsculas.
+
+#### Keyword Sets
+
+| Set | Keywords representativos | Tool resultado |
+|-----|--------------------------|----------------|
+| `_FP_COMER` | restaurante, comer, sidra, espicha, pote, fabada, gastronomía, dónde comer | `buscar_pois(cat=comer)` |
+| `_FP_OCIO` | monumento, museo, qué hacer, actividades, excursiones, imprescindible | `buscar_pois(cat=ocio)` |
+| `_FP_TIENDAS` | tienda, compras, comercio | `buscar_pois(cat=tiendas)` |
+| `_FP_CICLISMO` | ciclismo, bicicleta, ruta en bici | `buscar_rutas(tipo=ciclismo)` |
+| `_FP_SENDERISMO` | senderismo, senda, trekking | `buscar_rutas(tipo=senderismo)` |
+| `_FP_MERCADO` | mercado, feria, productos locales | `buscar_mercados(municipio_id)` |
+| `_FP_CATCH_ALL` | qué hay, qué puedo, recomiéndame, dónde puedo... | Usa `categoria` del contexto actual |
+
+#### Catch-All (Regla 9)
+
+Cuando el mensaje contiene frases genéricas de exploración (`_FP_CATCH_ALL`) y la página tiene `categoria` en el contexto → se usa la categoría actual del explorador sin necesidad de keywords específicos.
+
+```python
+_CAT_TO_TOOL = {
+    "comer":          ("buscar_pois",   "comer"),
+    "ocio":           ("buscar_pois",   "ocio"),
+    "tiendas":        ("buscar_pois",   "tiendas"),
+    "ciclismo":       ("buscar_rutas",  "ciclismo"),
+    "senderismo":     ("buscar_rutas",  "senderismo"),
+    "sendas_verdes":  ("buscar_rutas",  "sendas_verdes"),
+    "carril_bici":    ("buscar_rutas",  "carril_bici"),
+    "paseos":         ("buscar_rutas",  "paseos"),
+    "mercado":        ("buscar_mercados", None),
+}
+```
+
+#### Respuesta sin resultados
+
+Si la tool DB devuelve 0 resultados, el fast-path **siempre** genera un mensaje hardcodeado (nunca cae a OpenAI):
+
+> _"Lo siento, nun tengo información sobre esto en **Concejo**. Pero pues explorar por tu cuenta. [NAV:Concejo]"_
+
+### 3.4 Tools del Agente
+
+| Tool | Parámetros | Fuente datos | Descripción |
+|------|-----------|-------------|-------------|
+| `buscar_pois` | `municipio_id`, `categoria`, `tipo?` | `puntos_interes` | POIs: restaurantes, ocio, tiendas |
+| `buscar_rutas` | `municipio_id`, `tipo` | `rutas_*` (5 tablas) | Rutas deportivas por tipo |
+| `buscar_mercados` | `municipio_id`, `categoria?` | api_mercadoAsturias:8001 | Comercios de mercado con 5 subcategorías |
+| `buscar_por_producto` | `producto` | `puntos_interes` + `rutas_*` | Búsqueda genérica sin municipio |
+
+### 3.5 Sistema RAG (pibiCo Nivel 3)
+
+#### Tres fuentes de conocimiento (prioridad)
+
+1. **CONTEXTO_ACTUAL** (BD en tiempo real) — counts, nombres de rutas, POIs del concejo activo → SIEMPRE prevalece para datos concretos
+2. **Docs del notebook** (RAG pibiCo) — contexto cultural, histórico, narrativo; rutas famosas fuera de la BD
+3. **Conocimiento general** — fallback para preguntas que ninguna fuente anterior cubre
+
+#### Documentos en el notebook `nb_4c0b0100c552`
+
+| Documento | Contenido | Decisión |
+|-----------|-----------|----------|
+| `system.md` | System prompt maestro (~1500 tokens, condensado) | Inyectado en CADA llamada |
+| `asturias_general.md` | Historia, clima, geografía, UNESCO | RAG |
+| `gastronomia.md` | Fabada, sidra, quesos (no en BD) | RAG |
+| `senderismo.md` | Ruta del Cares, Senda del Oso, GR-E1 | RAG |
+| `ciclismo.md` | Rutas ciclistas destacadas | RAG |
+| `mercados.md` | Guía de uso de `buscar_mercados` | RAG |
+| `oviedo.md` | Historia, prerrománico, monumentos | RAG |
+| `gijon.md` | Eventos, museos, contexto urbano | RAG |
+| `llanes.md` | Gulpiyuri, Bufones, Pindal | RAG |
+| `ribadesella.md` | Descenso del Sella, Costa Jurásica | RAG |
+| `cangas_del_narcea.md` | Oso pardo, vino DOP, Muniellos | RAG |
+| `aviles.md` | Ciudad industrial reconvertida, NIEMEYER | RAG |
+| `somiedo.md` | Parque Natural, oso cantábrico | RAG |
+| `ponga.md` | Alta montaña, paisajes vírgenes | RAG |
+| `villaviciosa.md` | Capital de la sidra, Castro | RAG |
+| `cabrales.md` | Picos de Europa, queso Cabrales DOP | RAG |
+
+> **No subir al notebook**: `concejos_principales.md` (redundante con CONTEXTO_ACTUAL) · `frases_fijas.md` (documentación para devs)
+
+### 3.6 Frontend del Chat (`guia-chat.js`)
+
+#### CONV_KEY — Aislamiento por página
+
+```javascript
+const CONV_KEY = 'aguia_conv_' + window.location.pathname.replace(/\//g, '_').replace(/^_/, '');
+// /           → aguia_conv_
+// /explorar/24 → aguia_conv_explorar_24
+```
+
+Cada URL mantiene su propio historial de conversación en `sessionStorage`.
+
+#### Detección de navegación (`detectCategory` + `detectMercadoSubcat`)
+
+El chat analiza la respuesta del bot para proponer un botón de navegación inteligente:
+
+| Contenido de respuesta | Categoría destino | Contexto |
+|------------------------|-------------------|---------|
+| restaurante / comer / bar / gastronomía | `comer` | — |
+| tienda / compras / comercio | `tiendas` | — |
+| mercado / queso / sidra (compra) / llagar / quesería | `mercado` + subcat | detectMercadoSubcat |
+| monumento / museo / visitar / cultura / arte | `ocio` | — |
+| senderismo / senda / trekking | `senderismo` | — |
+| ciclismo / bicicleta / en bici | `ciclismo` | — |
+| carril bici / ciclocarril | `carril_bici` | — |
+| senda verde / vía verde | `sendas_verdes` | — |
+| paseo / caminata / caminar | `paseos` | — |
+| **sin keywords específicos** | `ocio` (fallback) | — |
+
+#### Subcategorías de mercado (`detectMercadoSubcat`)
+
+| Texto detectado | Slug | URL resultante |
+|-----------------|------|----------------|
+| sidra / llagar / cerveza | `sidra-bebidas` | `/explorar/{id}?cat=mercado&cat_filter=sidra-bebidas` |
+| queso / Cabrales / embutido | `gastro` | `/explorar/{id}?cat=mercado&cat_filter=gastro` |
+| artesanía / cerámica | `artesania` | `/explorar/{id}?cat=mercado&cat_filter=artesania` |
+| dulce / repostería | `dulce` | `/explorar/{id}?cat=mercado&cat_filter=dulce` |
+| huerta / fabe / verdura | `huerta-campo` | `/explorar/{id}?cat=mercado&cat_filter=huerta-campo` |
+
+#### Botón de navegación — comportamiento por contexto
+
+| Contexto | Comportamiento del botón |
+|----------|-------------------------|
+| `book.html` | `"🗺️ Ir a {municipio}"` → navega al municipio en la categoría detectada |
+| `explorar.html` | `"🗺️ Ir a la categoría {Cat} de {Concejo}"` → cambia de categoría sin salir del concejo |
+
+#### Captura de nombre — dos flujos
+
+**Flujo A (wizard primero):**
+```
+s0 typewriter → pregunta nombre → input + "¡Dale!" → sessionStorage guardado
+→ wizard 4 pasos → "💬 Pregunta más" → openChatMode()
+→ showInitialGreeting(): "Hola {nombre}, ¿Qué ye lo que quies saber?"
+```
+
+**Flujo B (chat primero, sin wizard):**
+```
+click monigote → openChatMode() → showInitialGreeting()
+→ historial vacío + sin nombre → "Hola, ¿Cómo te llames?" + _awaitingName=true
+→ primer mensaje interceptado por handleSend() (sin llamar API)
+→ sessionStorage guardado → "¡Encantau de conocete {nombre}!"
+→ conversación normal con API
+```
+
+### 3.7 Seguridad
+
+- La **API key de pibiCo** nunca se expone al frontend. Está en `.env` y solo la lee `services/guia.py`.
+- La **API key de OpenAI** también en `.env`, nunca en el cliente.
+- El `conversation_id` de pibiCo se pasa al frontend (no es secreto) y se guarda en `sessionStorage`.
+- Retry automático: si el `conversation_id` caduca (403), el cliente reintenta sin él.
+
+### 3.8 Contexto de Página (`window.ASTUGUIA_CONTEXT`)
+
+Inyectado por `base.html` desde Jinja2 en cada renderizado:
+
+```javascript
+window.ASTUGUIA_CONTEXT = {
+  municipio_id:     24,         // null en book.html
+  municipio_nombre: "Gijón",   // null en book.html
+  categoria:        "senderismo" // null en book.html
+};
+```
+
+El frontend lo envía en cada request a `/api/guia/chat` junto con `municipio_nombre` para personalizar respuestas.
+
+---
+
+## 4. Gamificación — Pasaporte, Trofeos y Estadísticas
+
+### 4.1 Descripción General
+
+Sistema de gamificación completamente client-side usando `localStorage`. No requiere autenticación ni backend adicional. Los datos persisten entre sesiones del mismo navegador.
+
+```
+localStorage keys:
+  passport_visited       → { municipio_id: { nombre, fecha } }
+  astuguia_trophies      → { badge_id: { fecha } }
+  astuguia_cat_counts    → { ciclismo: 3, senderismo: 7, ... }
+  astuguia_poi_count     → 42
+  astuguia_route_count   → 18
+  astuguia_sidreru       → "true" / null
+```
+
+### 4.2 Pasaporte de Concejos (`passport.js`)
+
+**Sello automático** al entrar a `/explorar/{id}`: `stampPassport(municipio_id, municipio_nombre)`
+
+**Panel visual** (dos páginas en paralelo):
+- **Cubierta**: fondo verde oscuro `#1a3a1a`, borde dorado, contador `X / 78`
+- **Página izquierda** (`.pp-page-left`): grid de trofeos desbloqueados/bloqueados
+- **Lomo** (`.pp-spine`): separador estilo encuadernación
+- **Página derecha** (`.pp-page-right`): grid de sellos por concejo, estilo sello postal
+
+**Descarga PDF**: `downloadPdf()` genera un layout de dos columnas (trofeos + sellos) usando `@media print` con `#passport-print-area` como hermano directo de `<body>` (evita el bug de PDF en blanco causado por `overflow:hidden` de paneles padres).
+
+### 4.3 Sistema de Trofeos (`trophies.js`)
+
+10 badges desbloqueables automáticamente al cumplir las condiciones:
+
+| Badge | Icono | Condición |
+|-------|-------|-----------|
+| Primer Paso | 👣 | Visitar 1 concejo |
+| Explorador | 🗺️ | Visitar 10 concejos |
+| Gran Viajero | ✈️ | Visitar 25 concejos |
+| Leyenda Asturiana | 👑 | Visitar los 78 concejos |
+| Costeru | 🌊 | Visitar 5 concejos costeros |
+| Senderista | 🥾 | Cargar la categoría senderismo 5 veces |
+| Ciclista | 🚴 | Cargar la categoría ciclismo 5 veces |
+| Sidreru | 🍺 | Entrar en un bar o sidrería |
+| Mercader | 🏪 | Explorar el mercado local 1 vez |
+| Curioso | 🔍 | Abrir 10 puntos de interés |
+
+Los trofeos se verifican (`checkAndUnlock`) al cargar categorías, abrir POIs y visitar municipios. Al desbloquear se muestra un toast flotante.
+
+### 4.4 Estadísticas del Viajero (`stats.js`)
+
+Panel con métricas acumuladas:
+
+| Métrica | Fuente |
+|---------|--------|
+| Concejos visitados (X/78) + barra progreso | `passport_visited` |
+| Puntos de interés explorados | `astuguia_poi_count` |
+| Rutas cargadas | `astuguia_route_count` |
+| Categoría favorita | `astuguia_cat_counts` (max) |
+| Categorías exploradas (ranking) | `astuguia_cat_counts` |
+
+### 4.5 Widget Meteorológico (`weather.js`)
+
+- **API**: Open-Meteo — **gratuita, sin API key, sin límite para uso no comercial**
+- **Acceso**: a través del proxy backend `GET /api/weather?lat=X&lon=Y` (mismo origen, sin restricciones CSP)
+- **Datos**: temperatura actual, min/max del día, código WMO → emoji (☀️ ⛅ 🌧️ ❄️...)
+- **Caché**: `sessionStorage` 30 minutos por coordenadas — evita peticiones repetidas al navegar
+- **Integración**:
+  - `book.html`: `initWeatherMulti()` con 3 ciudades fijas → panel vertical top-left
+    - Gijón (43.532, -5.660) · Oviedo (43.361, -5.859) · Avilés (43.556, -5.949)
+  - `explorar.html`: `initWeather(lat, lon)` con centroide real del municipio → HUD header
+- **Fallo**: silencioso — el widget queda vacío sin romper la experiencia
+
+---
+
+## 5. Obtención y Gestión de Datos
+
+### 5.1 Modelo de Datos — ERD Completo
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  BD: asturiasmap (PostgreSQL + PostGIS)                             │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌───────────────────────┐
@@ -285,7 +651,7 @@ Tablas rutas: rutas_ciclismo · rutas_senderismo · rutas_sendas_verdes
               rutas_carril_bici · rutas_paseos
 ```
 
-### 3.2 Recuentos de Registros
+### 5.2 Recuentos de Registros
 
 | Tabla | Registros | Tipo OSM | Observaciones |
 |-------|-----------|----------|---------------|
@@ -297,7 +663,7 @@ Tablas rutas: rutas_ciclismo · rutas_senderismo · rutas_sendas_verdes
 | `rutas_carril_bici` | 513 | **way** | `osm_id` negativo (evita colisión con relation IDs); filtradas <50 m |
 | `rutas_paseos` | 248 | way + relation | Filtrado: `distancia_m >= 30 m AND ST_NPoints >= 3`; ~74 devueltas para Gijón |
 
-### 3.3 Fuentes de Datos
+### 5.3 Fuentes de Datos
 
 #### OpenStreetMap (Overpass API)
 
@@ -318,12 +684,19 @@ Tablas rutas: rutas_ciclismo · rutas_senderismo · rutas_sendas_verdes
 - **Estrategia:** busca QID en `tags.wikidata` o `tags.name:etymology:wikidata`
 - **Rate limit:** pausa 1 segundo entre peticiones
 
-### 3.4 ETL Scripts
+#### Open-Meteo (meteorología)
+
+- **URL:** `https://api.open-meteo.com/v1/forecast` (accedida desde el servidor, no desde el browser)
+- **Sin API key, sin coste** — open source, uso no comercial ilimitado
+- **Datos:** temperatura actual + min/max diario + `weather_code` WMO
+- **Proxy:** `GET /api/weather?lat=X&lon=Y` en FastAPI → evita restricciones CSP del navegador
+- **Caché:** sessionStorage 30 minutos en el cliente — una sola petición al servidor por ubicación y sesión
+
+### 5.4 ETL Scripts
 
 #### `scripts/import_rutas_osm.py`
 
 ```bash
-# Uso
 python import_rutas_osm.py --tipo ciclismo
 python import_rutas_osm.py --tipo carril_bici
 python import_rutas_osm.py --tipo paseos
@@ -348,12 +721,6 @@ python import_rutas_osm.py --tipo paseos
 python enrich_elevacion.py --tipo senderismo
 python enrich_elevacion.py --tipo ciclismo --municipio-id 24
 python enrich_elevacion.py --tipo carril_bici --force
-
-# Argumentos
---tipo         tipo de ruta a enriquecer
---municipio-id (opcional) filtrar por municipio
---force        re-procesa aunque ya tenga datos (enriched_at NOT NULL)
---dry-run      simula sin actualizar
 ```
 
 #### `scripts/enrich_wikidata.py`
@@ -365,14 +732,6 @@ python enrich_wikidata.py --tipo ciclismo --force
 
 #### `scripts/update_rutas_monthly.sh`
 
-```bash
-#!/bin/bash
-# Orquestador mensual — ejecutado por cron: "0 3 1 * *"
-# 1. Re-importa todas las rutas desde Overpass
-# 2. Enriquece elevación (todas las tablas)
-# 3. Enriquece Wikidata (todas las tablas)
-```
-
 **Cron entry:**
 ```cron
 0 3 1 * * /home/erpnext/.services/app_asturiasMobile/scripts/update_rutas_monthly.sh >> /var/log/app_asturiasMobile/cron.log 2>&1
@@ -380,9 +739,9 @@ python enrich_wikidata.py --tipo ciclismo --force
 
 ---
 
-## 4. Guía de Estilo y Diseño UI/UX
+## 6. Guía de Estilo y Diseño UI/UX
 
-### 4.1 Principios de Diseño
+### 6.1 Principios de Diseño
 
 | Principio | Implementación |
 |-----------|---------------|
@@ -391,8 +750,9 @@ python enrich_wikidata.py --tipo ciclismo --force
 | **Lúdico e inmersivo** | Libro 3D animado como punto de entrada, personaje AstuGuía arrastrable |
 | **Sin texturas complejas** | Colores sólidos planos, sprites CanvasTexture generados en runtime |
 | **Performance móvil** | `devicePixelRatio` limitado a 1.5, Three.js lazy (solo en `/explorar/`) |
+| **Gamificación** | Sellos de pasaporte, trofeos, estadísticas — refuerzo positivo de la exploración |
 
-### 4.2 Paleta de Colores — Variables CSS
+### 6.2 Paleta de Colores — Variables CSS
 
 ```css
 /* Fondo y superficies */
@@ -429,9 +789,13 @@ python enrich_wikidata.py --tipo ciclismo --force
 
 /* Interacción */
 --touch-min:      44px;      /* Target táctil mínimo */
+
+/* Pasaporte */
+--passport-green: #1a3a1a;   /* Cubierta pasaporte */
+--passport-gold:  #b8960c;   /* Borde pasaporte */
 ```
 
-### 4.3 Tipografía
+### 6.3 Tipografía
 
 | Uso | Fuente | Peso | Tamaño base |
 |-----|--------|------|-------------|
@@ -442,7 +806,7 @@ python enrich_wikidata.py --tipo ciclismo --force
 
 Todos los ficheros WOFF2 en `static/vendor/fonts/`. Sin Google Fonts ni CDN.
 
-### 4.4 Componentes UI Clave
+### 6.4 Componentes UI Clave
 
 #### Libro 3D (`book.html` + `book.js`)
 
@@ -451,6 +815,7 @@ Geometría:  PlaneGeometry (BW=3.2, BD=4.5, BT=0.55)
 Fases:      FASE1 cerrado → FASE2 apertura (tween) → FASE3 abierto+Leaflet
 Materiales: MeshStandardMaterial (páginas), MeshToonMaterial (tapa/lomo)
 Cámara:     OrthographicCamera isométrica
+Ornamentos: Cruz de la Victoria (CanvasTexture), Rosa de los Vientos
 ```
 
 #### Escena 3D Isométrica (`explorar.js`)
@@ -468,19 +833,9 @@ Controls:     Touch pinch-zoom (ZOOM_MIN=5, MAX=35) · pan 1 dedo · doble tap r
 
 #### Bottom Bar de Categorías
 
-```html
-<!-- 9 botones, activo marcado por Jinja2 -->
-<div id="cat-bottom-bar">
-  <button class="cat-btn [active]" data-cat="senderismo">
-    <span class="cat-icon">🥾</span>
-    <span class="cat-label">Senderismo</span>
-  </button>
-  <!-- ... -->
-</div>
-```
-
-- Icono visible solo en móvil (`<576 px`)
+- 9 botones; activo marcado por Jinja2 en renderizado SSR
 - `switchCategory(newCat)`: fly-up sprites → limpiar escena → `loadCategory()` (SPA sin reload)
+- Icono solo en móvil (`< 576 px`); icono + texto en tablet/desktop
 
 #### Sidebars (POI y Ruta)
 
@@ -489,52 +844,45 @@ Controls:     Touch pinch-zoom (ZOOM_MIN=5, MAX=35) · pan 1 dedo · doble tap r
 | POI detail | `#poi-sidebar` | Clase `.open` | Nombre, tipo badge, opening_hours, dirección, minimap 260 px |
 | Ruta detail | `#route-sidebar` | Clase `.open` | Nombre, distancia, desnivel ↑/↓, descripción Wikidata, minimap 220 px con trazado |
 
-#### AstuGuía
+#### Pasaporte (`#passport-panel`)
+
+```
+Panel:   min(95vw, 740px) × min(85vh, 560px)
+Layout:  flex-row (≥640px) / flex-col (<640px)
+Cubierta: verde #1a3a1a + borde dorado #b8960c
+Página izq: crema #f8f3e8 + grid trofeos
+Lomo:    10px gradiente marrón
+Página der: grid sellos estilo sello postal
+```
+
+#### AstuGuía (personaje)
 
 ```
 Componentes: guia-utils.js    (SVG, typewriter, draggable, localStorage pos)
              guia-book.js     (wizard 4 pasos + captura nombre en book.html)
              guia-explorar.js (comentarista en explorar.html, modo compacto)
-             guia-chat.js     (chat directo pibiCo SSE + captura nombre + miniMd)
+             guia-chat.js     (chat directo SSE + captura nombre + miniMd)
 Eventos:     book:fase3ready · explorar:ready · explorar:categoryLoaded · explorar:poiSelected
 Persistencia: localStorage('guia_pos') para posición del personaje
              sessionStorage('astuguia_player_name') para nombre durante la sesión
+             sessionStorage(CONV_KEY) para historial de conversación por página
 ```
 
-**Flujo captura de nombre (Flujo A — wizard primero):**
-```
-s0 typewriter: "¡Qué pasa paisanu! … ¿Cómo te llames?"
-  → input .guia-name-input + botón "¡Dale!" aparecen al terminar el typewriter
-  → user escribe nombre → sessionStorage guardado + state.playerName
-  → "¡Encantau de conocete {nombre}! ¿Búscote un rincón nel Paraíso?"
-  → wizard completo → "💬 Pregunta más" → openChatMode()
-  → showInitialGreeting(): "Hola {nombre}, ¿Qué ye lo que quies saber?"
-```
-
-**Flujo captura de nombre (Flujo B — chat primero):**
-```
-click monigote → openChatMode() → showInitialGreeting()
-  → historial vacío + sin nombre en sessionStorage
-  → appendMessage('bot', 'Hola, ¿Cómo te llames?') + _awaitingName = true
-  → user escribe nombre → handleSend() intercepta (no llama API)
-  → sessionStorage guardado → "¡Encantau de conocete {nombre}! ¿Qué ye lo que quies saber?"
-  → conversación normal con API
-```
-
-### 4.5 Mobile-First: Breakpoints y Adaptaciones
+### 6.5 Mobile-First: Breakpoints y Adaptaciones
 
 | Breakpoint | Comportamiento |
 |------------|---------------|
 | `< 576 px` | Sidebar oculta, solo bottom bar, labels de categoría ocultos |
 | `≥ 576 px` | Labels categoría visibles |
+| `≥ 640 px` | Pasaporte en layout horizontal (dos páginas en paralelo) |
 | `≥ 768 px` | Sidebar izquierda visible (colapsada 56 px, expandida 190 px) |
 | Desktop | Mouse controls habilitados, sidebar expandida por defecto |
 
 ---
 
-## 5. Documentación de la API
+## 7. Documentación de la API
 
-### 5.1 Convenciones Generales
+### 7.1 Convenciones Generales
 
 - **Base URL local:** `http://localhost:8002`
 - **Base URL producción:** `https://[dominio]/mobile`
@@ -543,11 +891,9 @@ click monigote → openChatMode() → showInitialGreeting()
 - **Paginación:** parámetros `limit` y `offset`; header `X-Total-Count` con total
 - **Errores:** códigos HTTP estándar + body `{"detail": "mensaje"}`
 
-### 5.2 Health Check
+### 7.2 Health Check
 
 #### `GET /api/v1/health/live`
-
-Comprueba que la aplicación responde.
 
 **Response 200:**
 ```json
@@ -556,7 +902,7 @@ Comprueba que la aplicación responde.
 
 ---
 
-### 5.3 Municipios
+### 7.3 Municipios
 
 #### `GET /api/municipios`
 
@@ -571,8 +917,7 @@ Lista todos los municipios de Asturias.
     "poblacion": 271843,
     "centroide_lon": -5.661,
     "centroide_lat": 43.532
-  },
-  ...
+  }
 ]
 ```
 
@@ -580,224 +925,183 @@ Lista todos los municipios de Asturias.
 
 #### `GET /api/municipios/geojson`
 
-Devuelve un GeoJSON `FeatureCollection` con geometrías simplificadas (tolerancia 0.001°) para renderizar en Leaflet.
-
-**Response 200:**
-```json
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "MultiPolygon",
-        "coordinates": [...]
-      },
-      "properties": {
-        "id": 24,
-        "nombre": "Gijón",
-        "poblacion": 271843
-      }
-    },
-    ...
-  ]
-}
-```
+FeatureCollection GeoJSON simplificada (tolerancia 0.001°) para Leaflet.
 
 ---
 
 #### `GET /api/municipios/{id}`
 
-Devuelve el detalle de un municipio con geometría de mayor resolución (tolerancia 0.0001°).
+Detalle con geometría de mayor resolución (tolerancia 0.0001°).
 
-**Path params:**
-
-| Param | Tipo | Descripción |
-|-------|------|-------------|
-| `id` | integer | ID del municipio |
-
-**Response 200:**
-```json
-{
-  "id": 24,
-  "nombre": "Gijón",
-  "poblacion": 271843,
-  "centroide_lon": -5.661,
-  "centroide_lat": 43.532,
-  "geojson": "{\"type\":\"MultiPolygon\",\"coordinates\":[...]}"
-}
-```
-
-**Response 404:**
-```json
-{"detail": "Municipio no encontrado"}
-```
+**Response 404:** `{"detail": "Municipio no encontrado"}`
 
 ---
 
-### 5.4 Puntos de Interés
+### 7.4 Puntos de Interés
 
 #### `GET /api/pois/{municipio_id}?categoria=X&tipo=T&limit=N&offset=N`
 
-Devuelve POIs dentro del municipio, paginados. El filtro `tipo` permite filtrar server-side por subtipo OSM.
+| Param | Valores posibles |
+|-------|-----------------|
+| `categoria` | `comer`, `ocio`, `tiendas`, `mercado` |
+| `tipo` | Subtipo OSM: `restaurant`, `museum`, `bakery`, etc. (filtro server-side) |
+| `limit` | 1–100 (default 20) |
+| `offset` | ≥ 0 (default 0) |
 
-**Path params:**
+**Response headers:** `X-Total-Count: 47`
 
-| Param | Tipo | Descripción |
-|-------|------|-------------|
-| `municipio_id` | integer | ID del municipio |
+**Response 200:** lista de POIs con campos `osm_id`, `nombre`, `tipo`, `lon`, `lat`, `tags` (JSON con `opening_hours`, `addr:street`, `phone`, `website`...)
 
-**Query params:**
-
-| Param | Tipo | Default | Valores posibles |
-|-------|------|---------|-----------------|
-| `categoria` | string | — | `restaurantes`, `ocio`, `tiendas`, `mercado` |
-| `tipo` | string | `null` | Subtipo OSM: `restaurant`, `museum`, `bakery`, etc. (ver `CAT_FILTER_TAGS` en `explorar.js`) |
-| `limit` | integer | 20 | 1–100 |
-| `offset` | integer | 0 | ≥ 0 |
-
-**Response headers:**
-```
-X-Total-Count: 47
-```
-
-**Response 200:**
-```json
-[
-  {
-    "osm_id": 123456789,
-    "nombre": "Restaurante El Retiro",
-    "tipo": "restaurant",
-    "lon": -5.661,
-    "lat": 43.532,
-    "tags": {
-      "cuisine": "asturian",
-      "opening_hours": "Mo-Su 13:00-23:00",
-      "addr:street": "Calle Mayor, 5",
-      "phone": "+34 985 123 456"
-    }
-  },
-  ...
-]
-```
-
-**Categorías y tipos OSM asociados:**
+**Categorías y tipos OSM:**
 
 | Categoría | Tipos OSM incluidos |
 |-----------|-------------------|
-| `restaurantes` | restaurant, bar, cafe, fast_food, pub, food_court, biergarten |
-| `ocio` | cinema, theatre, museum, artwork, park, playground, sports_centre, swimming_pool, nightclub |
+| `comer` | restaurant, bar, cafe, fast_food, pub, food_court, biergarten |
+| `ocio` | cinema, theatre, museum, artwork, park, playground, sports_centre, swimming_pool |
 | `tiendas` | supermarket, clothes, shoes, books, electronics, bakery, butcher, florist |
-| `mercado` | marketplace, market_place (vía proxy `api_mercadoAsturias`) |
+| `mercado` | marketplace (vía proxy `api_mercadoAsturias`) |
 
 ---
 
-### 5.5 Rutas
+### 7.5 Rutas
 
 #### `GET /api/rutas/{municipio_id}?tipo=X&limit=N&offset=N`
 
-Devuelve rutas que intersectan con el municipio, paginadas.
+| Param | Valores posibles |
+|-------|-----------------|
+| `tipo` | `ciclismo`, `senderismo`, `sendas_verdes`, `carril_bici`, `paseos` |
 
-**Path params:**
+**Response headers:** `X-Total-Count: 12`
 
-| Param | Tipo | Descripción |
-|-------|------|-------------|
-| `municipio_id` | integer | ID del municipio |
-
-**Query params:**
-
-| Param | Tipo | Default | Valores posibles |
-|-------|------|---------|-----------------|
-| `tipo` | string | — | `ciclismo`, `senderismo`, `sendas_verdes`, `carril_bici`, `paseos` |
-| `limit` | integer | 20 | 1–100 |
-| `offset` | integer | 0 | ≥ 0 |
-
-**Response headers:**
-```
-X-Total-Count: 12
-```
-
-**Response 200:**
-```json
-[
-  {
-    "id": 1,
-    "osm_id": 987654321,
-    "nombre": "Ruta del Cervigón",
-    "distancia_m": 12450.5,
-    "ascenso_m": 340.2,
-    "descenso_m": 338.7,
-    "wikidata_desc": "Ruta costera que conecta...",
-    "enriched_at": "2026-03-10T03:15:00",
-    "geojson": "{\"type\":\"MultiLineString\",\"coordinates\":[...]}"
-  },
-  ...
-]
-```
-
-**Campos enriquecidos** (`null` si aún no procesados):
-
-| Campo | Fuente | Descripción |
-|-------|--------|-------------|
-| `ascenso_m` | Open-Elevation | Desnivel positivo acumulado en metros |
-| `descenso_m` | Open-Elevation | Desnivel negativo acumulado en metros |
-| `wikidata_desc` | Wikidata EntityData | Descripción en español de la entidad OSM |
-| `enriched_at` | Sistema | Timestamp de la última actualización |
+**Response 200:** lista con `id`, `osm_id`, `nombre`, `distancia_m`, `ascenso_m`, `descenso_m`, `wikidata_desc`, `enriched_at`, `geojson`
 
 ---
 
-### 5.6 Mercado (Proxy)
+### 7.6 Mercado (Proxy)
 
-#### `GET /api/mercado/{municipio_id}`
+#### `GET /api/mercado/{municipio_id}?categoria=X`
 
-Intermediario hacia `api_mercadoAsturias`, servicio independiente con su propia base de datos (`mercado_asturias`, usuario `mercado_user`), corriendo en puerto 8001.
+Proxy hacia `api_mercadoAsturias:8001`.
+
+| Param `categoria` | Descripción |
+|-------------------|-------------|
+| `gastro` | Quesos, embutidos, conservas |
+| `sidra-bebidas` | Sidrerías, llagares, bebidas |
+| `artesania` | Cerámica, tejidos, artesanía local |
+| `dulce` | Repostería, pastelerías |
+| `huerta-campo` | Verduras, fabes, productos de huerta |
+| _(vacío)_ | Todos los comercios |
 
 **Flujo interno:**
-1. Resuelve el nombre del municipio desde `asturiasmap` usando el `municipio_id`
-2. Convierte el nombre a slug (minúsculas, sin tildes, guiones)
-3. Llama a `http://localhost:8001/v1/municipios/{slug}/comercios` vía httpx async
-4. Devuelve la respuesta envuelta con metadatos del municipio
+1. Resuelve nombre del municipio → slug (sin tildes, guiones)
+2. Si `categoria` → llama `/v1/municipios/{slug}/categorias/{cat}/comercios`
+3. Si no → llama `/v1/municipios/{slug}/comercios`
+
+---
+
+### 7.7 Meteorología (Proxy)
+
+#### `GET /api/weather?lat=X&lon=Y`
+
+Proxy hacia Open-Meteo. Resuelve las restricciones CSP del navegador manteniendo toda la comunicación externa en el servidor.
+
+| Param | Tipo | Descripción |
+|-------|------|-------------|
+| `lat` | float | Latitud (ej. 43.532) |
+| `lon` | float | Longitud (ej. -5.660) |
+
+**Coste:** ninguno. Open-Meteo es gratuita, open source y sin API key para uso no comercial.
 
 **Response 200:**
 ```json
 {
-  "municipio_id": 24,
-  "municipio_nombre": "Gijón",
-  "slug": "gijon",
-  "total": 12,
-  "items": [...]
+  "current": {
+    "temperature_2m": 14.2,
+    "weather_code": 0
+  },
+  "daily": {
+    "temperature_2m_max": [17.1],
+    "temperature_2m_min": [9.3]
+  }
 }
 ```
 
-**Comportamiento ante fallos:**
-- API no disponible (timeout/conexión) → `{"total": 0, "items": [], "error": "API no disponible"}`
-- Municipio sin datos en mercado → `{"total": 0, "items": []}`
-
-> **Nota arquitectural:** `api_mercadoAsturias` es un microservicio independiente con BD propia (`mercado_asturias`). No comparte base de datos con `asturiasmap`. La comunicación es exclusivamente HTTP REST entre los dos servicios locales.
+**Response 502:** si Open-Meteo no responde → `{}` (el widget queda vacío silenciosamente).
 
 ---
 
-### 5.7 Páginas (SSR)
+### 7.8 AstuGuía Chat (Bridge IA)
+
+#### `POST /api/guia/chat`
+
+Endpoint SSE (Server-Sent Events) para el chat conversacional.
+
+**Content-Type request:** `application/json`
+**Content-Type response:** `text/event-stream`
+
+**Request body:**
+```json
+{
+  "message": "¿Qué rutas hay en Gijón?",
+  "municipio_id": 24,
+  "municipio_nombre": "Gijón",
+  "categoria": "senderismo",
+  "conversation_id": "conv_abc123",
+  "context_type": "explorar_ready"
+}
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `message` | string | Mensaje del usuario |
+| `municipio_id` | int \| null | ID del municipio actual (null en book.html) |
+| `municipio_nombre` | str \| null | Nombre del municipio (evita lookup extra) |
+| `categoria` | str \| null | Categoría activa en explorar.html |
+| `conversation_id` | str \| null | ID de conversación pibiCo; null para nueva |
+| `context_type` | string | `chat` \| `explorar_ready` \| `explorar_poi` \| ... |
+
+**Flujo SSE response:**
+
+```
+event: progress
+data: {"msg": "Buscando en Gijón..."}
+
+data: ¡Buah! En Gijón
+
+data:  tengo
+
+data:  estas rutas...
+
+data: [DONE]
+```
+
+El tag `[NAV:Concejo]` en el texto indica al frontend dónde crear el botón de navegación. Se extrae y elimina del texto visible.
+
+**Reintentar conversación caducada:**
+- Si el `conversation_id` caduca → pibiCo devuelve 403 → el frontend reintenta automáticamente con `conversation_id: null`
+- El backend emite `event: conv_id\ndata: {nuevo_id}` al iniciar nueva conversación
+
+---
+
+### 7.8 Páginas (SSR)
 
 #### `GET /`
 
-Devuelve `book.html` — libro 3D animado con Leaflet embebido. Punto de entrada principal.
+Devuelve `book.html` — punto de entrada principal.
 
 #### `GET /explorar/{municipio_id}?cat=X`
 
-Devuelve `explorar.html` — escena 3D isométrica del municipio.
+Devuelve `explorar.html`. Los datos del municipio se inyectan como `data-*` en el elemento raíz:
+- `data-municipio-id`, `data-municipio-nombre`, `data-cat`
+- `data-costero`, `data-geojson`, `data-lat`, `data-lon`
 
-**Query params:**
-
-| Param | Tipo | Default | Descripción |
-|-------|------|---------|-------------|
-| `cat` | string | `senderismo` | Categoría inicial a cargar |
-
-Los datos del municipio se inyectan como atributos `data-*` en el elemento raíz para evitar petición adicional al cargar.
+| Param `cat` | Default |
+|-------------|---------|
+| `senderismo` | si no se especifica |
 
 ---
 
-### 5.8 Códigos de Error
+### 7.9 Códigos de Error
 
 | Código HTTP | Significado |
 |-------------|-------------|
@@ -809,45 +1113,49 @@ Los datos del municipio se inyectan como atributos `data-*` en el elemento raíz
 
 ---
 
-## 6. Configuración y Despliegue
+## 8. Configuración y Despliegue
 
-### 6.1 Instalación Local
+### 8.1 Instalación Local
 
 ```bash
-# Clonar / acceder al directorio
 cd /home/erpnext/.services/app_asturiasMobile
 
-# Crear entorno virtual
 python3.13 -m venv venv
 source venv/bin/activate
 
-# Instalar dependencias
 pip install -r requirements.txt
 
-# Arrancar en desarrollo
 uvicorn app.main:app --reload --port 8002
 ```
 
-### 6.2 Variables de Entorno / Configuración
-
-El archivo `app/core/config.py` usa `pydantic-settings` y carga desde `.env`:
+### 8.2 Variables de Entorno
 
 ```env
-# .env  (en raíz del proyecto, NO subir a git)
-DATABASE_URL=postgresql+asyncpg://user:password@localhost/asturiasmap
+# .env  (raíz del proyecto, NO subir a git)
+DATABASE_URL=postgresql+asyncpg://asturiasuser:password@localhost/asturiasmap
 PORT=8002
 ROOT_PATH=              # vacío en local; /mobile en producción
+
+# AstuGuía — IA
+CHAT_API_KEY=pk-...      # API key pibiCo (NUNCA exponer al frontend)
+CHAT_NOTEBOOK_ID=nb_4c0b0100c552
+CHAT_BASE_URL=https://chat.pibi.co
+
+# OpenAI (fast-path fallback)
+OPENAI_API_KEY=sk-...
 ```
 
-| Variable | Tipo | Default | Descripción |
-|----------|------|---------|-------------|
-| `DATABASE_URL` | string | — | Conexión asyncpg a PostgreSQL |
-| `PORT` | integer | 8002 | Puerto de escucha |
-| `ROOT_PATH` | string | `""` | Prefijo nginx (`/mobile` en producción) |
+| Variable | Descripción |
+|----------|-------------|
+| `DATABASE_URL` | Conexión asyncpg a PostgreSQL |
+| `PORT` | Puerto de escucha (8002) |
+| `ROOT_PATH` | Prefijo nginx (`/mobile` en producción) |
+| `CHAT_API_KEY` | API key pibiCo — solo backend |
+| `CHAT_NOTEBOOK_ID` | ID del notebook RAG en pibiCo |
+| `CHAT_BASE_URL` | URL base de la API pibiCo |
+| `OPENAI_API_KEY` | API key OpenAI para fast-path fallback |
 
-> **Nota:** `ROOT_PATH` se inyecta en las plantillas Jinja2 como `data-root` en el elemento `#app-book` / `#app-explorar`. El JS lo lee con `dataset.root || ''` para construir URLs correctas tanto en local como en producción.
-
-### 6.3 Configuración Supervisor
+### 8.3 Configuración Supervisor
 
 ```ini
 ; /etc/supervisor/conf.d/app_asturiasMobile.conf
@@ -867,36 +1175,36 @@ stderr_logfile=/var/log/app_asturiasMobile/error.log
 stdout_logfile=/var/log/app_asturiasMobile/access.log
 ```
 
-**Comandos útiles:**
-
+**Comandos:**
 ```bash
-sudo supervisorctl restart app_asturiasMobile   # reiniciar tras cambios en Python
-sudo supervisorctl status app_asturiasMobile    # ver estado
-sudo supervisorctl tail -f app_asturiasMobile   # logs en tiempo real
+sudo supervisorctl restart app_asturiasMobile   # OBLIGATORIO tras cambios en Python
+sudo supervisorctl status app_asturiasMobile
+sudo supervisorctl tail -f app_asturiasMobile
 ```
 
-> **Importante:** Tras cualquier cambio en `services/*.py`, `models/*.py`, `main.py` o `core/config.py`, es **obligatorio** reiniciar con `supervisorctl restart`.
-
-### 6.4 Configuración Nginx
+### 8.4 Configuración Nginx
 
 ```nginx
-# /etc/nginx/sites-available/app_asturiasMobile
 location /mobile/ {
     proxy_pass         http://127.0.0.1:8002/;
     proxy_set_header   Host $host;
     proxy_set_header   X-Real-IP $remote_addr;
     proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header   X-Forwarded-Proto $scheme;
+
+    # CRÍTICO para SSE (chat AstuGuía)
+    proxy_buffering    off;
+    proxy_read_timeout 120s;
 }
 
-# Estáticos vendor y fuentes — cache agresiva (contenido inmmutable)
+# Vendor y fuentes — cache inmutable (nunca cambian)
 location /mobile/static/vendor/ {
     alias /home/erpnext/.services/app_asturiasMobile/static/vendor/;
     expires 365d;
     add_header Cache-Control "public, immutable";
 }
 
-# CSS y JS propios — nunca cachear (permite deploys instantáneos)
+# CSS y JS propios — nunca cachear (deploys instantáneos)
 location /mobile/static/css/ {
     alias /home/erpnext/.services/app_asturiasMobile/static/css/;
     add_header Cache-Control "no-cache, must-revalidate";
@@ -908,9 +1216,12 @@ location /mobile/static/js/ {
 }
 ```
 
-> **Regla crítica de caché:** Los archivos `vendor/` y `fonts/` pueden usar `immutable` (no cambian nunca). Los archivos CSS y JS propios **nunca deben usar `immutable`** — usar `no-cache, must-revalidate`. Si hay caché agresiva existente, añadir cache-busting `?v=X` en los `<script src>` y `<link href>`.
+> **Reglas críticas de caché:**
+> - `proxy_buffering off` es **obligatorio** para que el SSE del chat fluya en tiempo real
+> - Los archivos CSS/JS propios nunca usan `immutable`. Cache-busting con `?v=X` en `<script src>` si hay caché existente
+> - `vendor/` y `fonts/` sí pueden usar `immutable` (nunca cambian)
 
-### 6.5 Dependencias Python (`requirements.txt`)
+### 8.5 Dependencias Python
 
 ```
 fastapi>=0.115
@@ -922,14 +1233,15 @@ geoalchemy2
 pydantic-settings
 jinja2
 python-multipart
-httpx           # proxy mercado
+httpx           # proxy mercado + cliente pibiCo
+openai          # fast-path fallback
 ```
 
 ---
 
-## 7. Mantenimiento y Escalabilidad
+## 9. Mantenimiento y Escalabilidad
 
-### 7.1 Operaciones de Mantenimiento Habituales
+### 9.1 Operaciones de Mantenimiento Habituales
 
 | Tarea | Comando / Acción |
 |-------|-----------------|
@@ -940,35 +1252,35 @@ httpx           # proxy mercado
 | Forzar re-enriquecimiento Wikidata | `python scripts/enrich_wikidata.py --tipo ciclismo --force` |
 | Cache-busting CSS/JS | Incrementar `?v=X` en `<script src>` / `<link href>` en el template |
 | Reload nginx | `sudo nginx -t && sudo systemctl reload nginx` |
+| Actualizar docs notebook pibiCo | Subir manualmente desde interfaz web del notebook `nb_4c0b0100c552` |
 
-### 7.2 Limitaciones Conocidas
+### 9.2 Limitaciones Conocidas
 
 | Limitación | Descripción | Impacto |
 |------------|-------------|---------|
-| **BD compartida** | `asturiasmap` es compartida con `app_example`. `asturiasuser` es propietario de todas las tablas y tiene acceso completo. Precaución: no modificar tablas que `app_example` use activamente (`municipios`, `puntos_interes`) sin coordinación | Medio — riesgo de conflicto entre apps si se modifica el esquema compartido |
-| **Enriquecimiento parcial** | Elevación y Wikidata ejecutados solo para algunos municipios (ej. Gijón id=24) | Medio — rutas sin `ascenso_m`/`descenso_m` muestran `null` en sidebar |
-| **Overpass API rate limit** | Sin API key, límite de peticiones por IP | Bajo — scripts ETL son de ejecución mensual |
-| **Open-Elevation fallback** | El servicio primario puede estar caído; fallback OpenTopoData también puede fallar | Bajo — datos de elevación pueden quedar incompletos |
-| **devicePixelRatio limitado** | Forzado a max 1.5 para rendimiento móvil. Pantallas de alta densidad pueden verse menos nítidas | Bajo — decisión de diseño deliberada |
-| **Sin autenticación** | API completamente pública. Sin rate limiting propio (depende de nginx) | Medio — potencial abuso de `/api/rutas/` (queries PostGIS pesadas) |
-| **Sin caché de queries** | Cada petición ejecuta queries PostGIS en tiempo real | Medio — `ST_Intersects` sobre rutas puede ser lento en tablas grandes |
+| **BD compartida** | `asturiasmap` compartida con `app_example`. No modificar `municipios` ni `puntos_interes` sin coordinación | Medio |
+| **Enriquecimiento parcial** | Elevación y Wikidata ejecutados solo para algunos municipios (ej. Gijón) | Medio — rutas sin `ascenso_m` muestran `null` |
+| **Gamificación client-only** | Pasaporte y trofeos en `localStorage` — se pierden al limpiar el navegador, no son portables entre dispositivos | Bajo — decisión de diseño para evitar autenticación |
+| **Open-Meteo dependencia externa** | Gratuita y sin API key, pero depende de disponibilidad del servicio. Si falla → widget vacío, sin impacto en funcionalidad. El proxy backend aísla al cliente de cualquier error de red | Bajo |
+| **Overpass API rate limit** | Sin API key, límite de peticiones por IP | Bajo — ETL de ejecución mensual |
+| **Sin caché de queries** | Cada petición ejecuta queries PostGIS en tiempo real | Medio — `ST_Intersects` puede ser lento en tablas grandes |
+| **Sin autenticación** | API completamente pública | Medio — potencial abuso de endpoints PostGIS pesados |
+| **Notebook docs manuales** | Los docs del RAG pibiCo se suben manualmente. Sin automatización de upload | Bajo — cambios en docs son poco frecuentes |
 
-### 7.3 Roadmap Futuro
+### 9.3 Decisiones Arquitectónicas Clave
 
-#### AstuGuía — Mejoras RAG (Prioridad Media)
+| Decisión | Motivo |
+|----------|--------|
+| **Fast-path antes de OpenAI** | Reduce latencia de 15-60s a <100ms para el 80% de las consultas sobre POIs y rutas de los 78 municipios |
+| **API key en backend** | La key de pibiCo y OpenAI nunca llegan al navegador. El frontend solo maneja el `conversation_id` (no secreto) |
+| **`setTimeout(0)` para `book:fase3ready`** | Garantiza que `guia-book.js` termina de registrar listeners antes de recibir el evento (evita race condition con el animation loop de Three.js) |
+| **CONV_KEY por pathname** | Aísla el historial de conversación por página — explorar/24 y explorar/43 no comparten contexto |
+| **`proxy_buffering off`** | Nginx sin buffering es obligatorio para SSE; sin esto, el chat no fluye en tiempo real |
+| **Catch-all fast-path** | Frases genéricas ("qué hay", "recomiéndame") cuando hay categoría en contexto → responden con datos BD sin pasar por OpenAI |
+| **Municipio detection por longitud de nombre** | Los 78 municipios se ordenan por `LENGTH(nombre) DESC` para que "Cangas del Narcea" matchee antes que "Cangas" |
+| **Gamificación localStorage** | Sin autenticación, sin backend adicional, coste cero, experiencia inmediata |
 
-El personaje guía **AstuGuía** está completamente implementado con wizard + chat conectado a pibiCo API (notebook `nb_4c0b0100c552`). La evolución propuesta es migrar a RAG propio:
-
-| Componente | Estado actual | Evolución propuesta |
-|------------|--------------|---------------------|
-| LLM | pibiCo notebook (RAG externo) | Claude API (`claude-sonnet-4-6`) directo |
-| Vector store | Gestionado por pibiCo | pgvector en `asturiasmap` |
-| Base conocimiento | `docs/astuguia_system.md` subido manualmente | ETL automático desde OSM + Wikidata |
-| UI | ✅ Chat SSE en monigote arrastrable | Sin cambios necesarios |
-| Captura nombre | ✅ sessionStorage('astuguia_player_name') | Sin cambios necesarios |
-
-**Tarea pendiente inmediata:**
-- Subir `docs/astuguia_system.md` actualizado al notebook pibiCo `nb_4c0b0100c552`
+### 9.4 Roadmap Futuro
 
 #### PWA — Progressive Web App (Prioridad Media)
 
@@ -980,24 +1292,30 @@ La arquitectura actual ya está preparada. Solo requiere:
 3. <link rel="manifest"> en base.html
 ```
 
-El `meta viewport` ya está configurado correctamente y no usa `user-scalable=no` (requerido para PWA).
+#### AstuGuía — Evolución a RAG Propio (Prioridad Baja)
+
+| Componente | Estado actual | Evolución propuesta |
+|------------|--------------|---------------------|
+| LLM | pibiCo + OpenAI | Claude API (`claude-sonnet-4-6`) directo |
+| Vector store | pibiCo RAG | pgvector en `asturiasmap` |
+| Base conocimiento | docs manuales en notebook | ETL automático desde OSM + Wikidata |
+| UI | ✅ Chat SSE en monigote | Sin cambios necesarios |
 
 #### Optimizaciones de Rendimiento (Prioridad Baja)
 
 | Mejora | Descripción |
 |--------|-------------|
-| Redis cache | Cachear respuestas `/api/municipios/geojson` (cambia solo con ETL) |
-| Rate limiting | `slowapi` o nginx `limit_req` para endpoints de queries pesadas |
-| Índices PostGIS | `CREATE INDEX GIST` en columnas `geom` de tablas rutas (si no existen) |
-| Paginación cursor | Sustituir `OFFSET` por cursor en tablas grandes (`rutas_paseos`) |
-| Enriquecimiento completo | Escalar `enrich_elevacion.py` y `enrich_wikidata.py` a todos los municipios |
+| Redis cache | Cachear `/api/municipios/geojson` (cambia solo con ETL) |
+| Rate limiting | `slowapi` o nginx `limit_req` para endpoints PostGIS pesados |
+| Índices PostGIS | `CREATE INDEX GIST` en columnas `geom` de tablas rutas |
+| Enriquecimiento completo | Escalar elevación y Wikidata a todos los municipios |
+
+#### Gamificación — Sincronización (Prioridad Baja)
+
+- Añadir endpoint de guardado en BD para hacer los datos portables entre dispositivos
+- Requiere autenticación mínima (OAuth social)
 
 #### Nuevas Categorías OSM (Prioridad Baja)
-
-La arquitectura de `explorar.js` permite añadir nuevas categorías simplemente:
-1. Añadiendo la categoría a `ROUTE_CATS` o al set de categorías POI
-2. Creando la tabla correspondiente en la BD
-3. Añadiendo el botón en `#cat-bottom-bar` y la ruta API
 
 Categorías candidatas: rutas ecuestres, playas, miradores, patrimonio cultural.
 
@@ -1018,13 +1336,19 @@ Categorías candidatas: rutas ecuestres, playas, miradores, patrimonio cultural.
 | `sesion_2026-03-09_18-34.md` | 2026-03-09 | Sidebar recortado, rutas con metadatos, AstuGuía enriquecida |
 | `sesion_2026-03-10_08-58.md` | 2026-03-10 | Enriquecimiento rutas + route-sidebar + desnivel |
 | `sesion_2026-03-10_10-07.md` | 2026-03-10 | Limpieza datos OSM: fix queries, filtros longitud, elevación 100% |
-| `sesion_2026-03-10_12-04.md` | 2026-03-10 | Fix paseos (footway/path + filtro 30m), highlight AstuGuía todas categorías, fix mouse pan X invertido |
-| `sesion_2026-03-11_08-16.md` | 2026-03-11 | Migración RAG propio → widget pibiCo; fix CSP nginx; `docs/astuguia_system.md` creado |
-| `sesion_2026-03-11_09-27.md` | 2026-03-11 | Chat integrado en monigote (guia-chat.js); fix 403 stale convId, dots nullificado, system_prompt |
-| `sesion_2026-03-11_13-16.md` | 2026-03-11 | Personalidad AstuGuía: bable, `rnd()`, getTipComment 3 variantes/categoría |
-| `sesion_2026-03-12_12-05.md` | 2026-03-12 | Markdown en chat: miniMd() inline, fix bug pérdida formato en onDone |
-| `sesion_2026-03-12_13-06.md` | 2026-03-12 | Captura nombre usuario: wizard s0 + sessionStorage, flujo A y B, fix input compacto |
-| `sesion_2026-03-12_14-49.md` | 2026-03-12 | Verificación filtro server-side ocio y tiendas: mecanismo ya genérico, sin cambios necesarios |
+| `sesion_2026-03-10_12-04.md` | 2026-03-10 | Fix paseos (footway/path + filtro 30m), highlight AstuGuía todas categorías, fix mouse pan |
+| `sesion_2026-03-11_08-16.md` | 2026-03-11 | Migración RAG propio → widget pibiCo; fix CSP nginx |
+| `sesion_2026-03-11_09-27.md` | 2026-03-11 | Chat integrado en monigote (guia-chat.js); fix 403 stale convId |
+| `sesion_2026-03-11_13-16.md` | 2026-03-11 | Personalidad AstuGuía: bable, `rnd()`, getTipComment 3 variantes |
+| `sesion_2026-03-12_12-05.md` | 2026-03-12 | Markdown en chat: miniMd() inline, fix bug pérdida formato |
+| `sesion_2026-03-12_13-06.md` | 2026-03-12 | Captura nombre usuario: wizard s0 + sessionStorage, flujos A y B |
+| `sesion_2026-03-12_14-49.md` | 2026-03-12 | Verificación filtro server-side ocio y tiendas |
+| `sesion_2026-03-13_09-26.md` | 2026-03-13 | **Bridge IA** `/api/guia/chat` unificado; `services/guia.py`; CONTEXTO_ACTUAL BD; API key en backend |
+| `sesion_2026-03-13_11-34.md` | 2026-03-13 | Optimización notebook pibiCo: auditoría docs, `proxy_buffering off`, índice municipio_id, system.md condensado |
+| `sesion_2026-03-13_18-41.md` | 2026-03-13 | Docs 5 concejos (Avilés, Somiedo, Ponga, Villaviciosa, Cabrales); fix `detectCategory` fallback `ocio` |
+| `sesion_2026-03-18_12-19.md` | 2026-03-18 | Tool `buscar_mercados`; `mercados.md`; proxy mercado con `?categoria=`; fix filtros mercado con `data-cat` slugs; `detectMercadoSubcat` |
+| `sesion_2026-03-19_12-25.md` | 2026-03-19 | **Fast-path 78 municipios** (BD cache); CONV_KEY por pathname; botón categoría en explorar vs municipio en book; empty→hardcoded; keywords ampliados; catch-all contexto; fix chat se cerraba al escribir; fix monigote race condition |
+| `sesion_2026-03-19.md` | 2026-03-19 | Rediseño pasaporte: dos páginas en paralelo; fix PDF en blanco (`#passport-print-area` fuera del panel) |
 
 ---
 
@@ -1036,7 +1360,7 @@ cd /home/erpnext/.services/app_asturiasMobile
 source venv/bin/activate
 uvicorn app.main:app --reload --port 8002
 
-# Producción — reiniciar
+# Producción — reiniciar (OBLIGATORIO tras cambios Python)
 sudo supervisorctl restart app_asturiasMobile
 
 # ETL — importar rutas
@@ -1048,7 +1372,6 @@ python scripts/import_rutas_osm.py --tipo paseos
 
 # ETL — enriquecer elevación
 python scripts/enrich_elevacion.py --tipo senderismo
-python scripts/enrich_elevacion.py --tipo ciclismo
 # ... (repetir para cada tipo)
 
 # ETL — enriquecer Wikidata
@@ -1058,8 +1381,13 @@ python scripts/enrich_wikidata.py --tipo senderismo
 # Logs
 sudo tail -f /var/log/app_asturiasMobile/error.log
 sudo tail -f /var/log/app_asturiasMobile/access.log
+
+# Test bridge AstuGuía
+curl -N -X POST http://localhost:8002/api/guia/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"qué rutas hay?","context_type":"explorar_ready","municipio_id":24,"categoria":"senderismo"}'
 ```
 
 ---
 
-*Última actualización: 2026-03-12. Para actualizaciones, editar directamente este archivo y mantener sincronizado con los cambios del proyecto.*
+*Última actualización: 2026-03-19 · Para actualizar, editar este archivo y mantener sincronizado con los cambios del proyecto.*
