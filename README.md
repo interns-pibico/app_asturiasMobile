@@ -51,27 +51,83 @@ migrations/        # Alembic migrations
 
 ## Setup
 
+### 1. Prerequisites
+
+- Python 3.11+
+- PostgreSQL 14+ with PostGIS extension
+- (Optional) Nginx + Supervisor for production
+
+### 2. Clone and install
+
 ```bash
+git clone https://github.com/interns-pibico/app_asturiasMobile.git
+cd app_asturiasMobile
+
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env with DATABASE_URL, SECRET_KEY, etc.
+# Edit .env — fill in DATABASE_URL, SECRET_KEY, CHAT_* variables
+```
 
+### 3. Create the databases
+
+```bash
+# Main database (PostGIS required)
+sudo -u postgres psql -c "CREATE USER asturiasuser WITH PASSWORD 'yourpassword';"
+sudo -u postgres psql -c "CREATE DATABASE asturiasmap OWNER asturiasuser;"
+sudo -u postgres psql -d asturiasmap -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+# Mercado database
+sudo -u postgres psql -c "CREATE USER mercado_user WITH PASSWORD 'yourpassword';"
+sudo -u postgres psql -c "CREATE DATABASE mercado_asturias OWNER mercado_user;"
+```
+
+### 4. Restore seed data
+
+**`asturiasmap`** — download `seed_asturiasmap.sql.gz` from the [latest GitHub Release](../../releases/latest):
+
+```bash
+gunzip -c seed_asturiasmap.sql.gz | psql -U asturiasuser -d asturiasmap
+```
+
+**`mercado_asturias`** — included in the repo at `data/seed_mercado_asturias.sql`:
+
+```bash
+psql -U mercado_user -d mercado_asturias < data/seed_mercado_asturias.sql
+```
+
+### 5. Run migrations
+
+```bash
 alembic upgrade head
-uvicorn app.main:app --reload
+```
+
+### 6. Start the app
+
+```bash
+# Development
+uvicorn app.main:app --reload --port 8002
+
+# Production (Gunicorn + Nginx)
+# See deploy/ for reference configs
+gunicorn app.main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8002
 ```
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL async connection string |
+| `DATABASE_URL` | PostgreSQL async URL (`postgresql+asyncpg://user:pass@host/asturiasmap`) |
 | `SECRET_KEY` | JWT signing secret |
 | `APP_ROOT_PATH` | Root path for reverse proxy (e.g. `/mobile`) |
-| `DEBUG` | Enable debug mode |
-| `DEFAULT_LANGUAGE` | Default locale (`es`) |
+| `APP_PORT` | Port to listen on (default `8002`) |
+| `DEBUG` | Enable debug mode (`true`/`false`) |
+| `DEFAULT_LOCALE` | Default locale (`es`) |
+| `CHAT_API_KEY` | pibiCo API key for AstuGuía chat |
+| `CHAT_NOTEBOOK_ID` | pibiCo notebook ID for AstuGuía RAG |
+| `CHAT_BASE_URL` | pibiCo API base URL |
 
 ## License
 
