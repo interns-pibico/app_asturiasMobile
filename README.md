@@ -86,7 +86,9 @@ sudo -u postgres psql -c "CREATE DATABASE mercado_asturias OWNER mercado_user;"
 
 ### 4. Restore seed data
 
-**`asturiasmap`** — download `seed_asturiasmap.sql.gz` from the [latest GitHub Release](../../releases/latest):
+**`asturiasmap`** — download `seed_asturiasmap.sql.gz` from:
+[📦 Download seed_asturiasmap.sql.gz](YOUR_LINK_HERE)
+<!-- Replace YOUR_LINK_HERE with your Google Drive / Dropbox / etc. share link -->
 
 ```bash
 gunzip -c seed_asturiasmap.sql.gz | psql -U asturiasuser -d asturiasmap
